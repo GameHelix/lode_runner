@@ -74,7 +74,8 @@ fi
 
 step "replace the server; the address and the backup volume move to the new one"
 trap - ERR
-state_of() { tofu state show -no-color hcloud_server.host 2>/dev/null | awk -v k="$1" '$1 == k { gsub(/"/, "", $3); print $3 }'; }
+# Empty, not a failure, when the state holds no server: the case --resume starts from.
+state_of() { { tofu state show -no-color hcloud_server.host 2>/dev/null || true; } | awk -v k="$1" '$1 == k { gsub(/"/, "", $3); print $3 }'; }
 before=$(state_of id)
 old_type=$(state_of server_type)
 if [ "$mode" = --resume ]; then
@@ -120,7 +121,7 @@ ssh "$host" 'cloud-init status' | grep -q 'status: done'
 step "put /srv/secrets back from the volume"
 ssh "$host" "sudo install -d /mnt/backup && sudo mount $device /mnt/backup"
 # On --resume the newest day on the volume is the backup the failed run took.
-[ -n "$day" ] || day=$(ssh "$host" 'sudo ls -1 /mnt/backup' | grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' | sort | tail -1)
+[ -n "$day" ] || day=$(ssh "$host" 'sudo ls -1 /mnt/backup' | { grep -E '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || true; } | sort | tail -1)
 [ -n "$day" ] || { echo "no backup day on the volume" >&2; exit 1; }
 echo "restoring the backup of $day"
 ssh "$host" "sudo tar -C /srv -xzf /mnt/backup/$day/secrets.tar.gz && sudo chown -R $user:$user /srv/secrets"
