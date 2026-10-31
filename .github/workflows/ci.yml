@@ -24,8 +24,8 @@ jobs:
           if git cat-file -e "$BASE^{commit}" 2>/dev/null; then files=$(git diff --name-only "$BASE" HEAD); else files=$(git ls-files); fi
           files=$(grep -v '\.md$' <<<"$files" || true)
           has() { grep -qE "$1" <<<"$files"; }
-          has '^(trader|notifier|app)/|^go\.(mod|sum)$' && echo go=true >>"$GITHUB_OUTPUT"
-          has '^infra/' && echo infra=true >>"$GITHUB_OUTPUT"
+          has '^(trader|notifier|app)/|^go\.(mod|sum)$|^\.github/' && echo go=true >>"$GITHUB_OUTPUT"
+          has '^infra/|^deploy\.sh$|^\.github/' && echo infra=true >>"$GITHUB_OUTPUT"
           deploy=""
           has '^trader/|^go\.(mod|sum)$' && deploy="$deploy trader"
           has '^notifier/|^go\.(mod|sum)$' && deploy="$deploy notifier"
