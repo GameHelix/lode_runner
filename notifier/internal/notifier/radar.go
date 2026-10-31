@@ -31,7 +31,11 @@ func (s *Service) radar(ctx context.Context) {
 				}
 			}
 			seq = a.Seq
-			if err := s.Store.SetRadarCursor(ctx, s.RadarChannel, seq); err != nil {
+			// Saved even while shutting down, so a restart neither
+			// repeats this alert nor skips the next.
+			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if err := s.Store.SetRadarCursor(sctx, s.RadarChannel, seq); err != nil {
 				s.Logf("database: %v", err)
 			}
 			return nil

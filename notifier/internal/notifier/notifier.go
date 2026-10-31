@@ -44,7 +44,9 @@ type outgoing struct {
 	chat    int64
 	text    string
 	buttons []telegram.Button
-	done    chan struct{}
+	// done, when set, gets whether the message is finished with: sent, or
+	// refused by Telegram for good. False means a shutdown cut it off.
+	done chan bool
 }
 
 const helpText = `This bot posts the Candylario radar: unusual moves on Hyperliquid perpetuals, each with what followed such moves before. In a chat connected to your account, each alert has buttons that trade it from your wallet: Long $25, Short $25 or Ignore.
@@ -127,9 +129,13 @@ func (s *Service) listen(ctx context.Context) error {
 				s.tap(ctx, *u.Callback)
 			}
 			offset = u.UpdateID + 1
-			if err := s.Store.SetOffset(ctx, s.name, offset); err != nil {
+			// Saved even while shutting down, so a restart does not
+			// handle the update again.
+			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			if err := s.Store.SetOffset(sctx, s.name, offset); err != nil {
 				s.Logf("database: %v", err)
 			}
+			cancel()
 		}
 	}
 	return nil
@@ -144,20 +150,30 @@ func (s *Service) say(ctx context.Context, chat int64, text string) {
 }
 
 // send queues a message, with buttons when given, and waits until it is
-// delivered or dropped.
+// delivered or dropped. A message finished just as a shutdown came counts
+// as finished.
 func (s *Service) send(ctx context.Context, chat int64, text string, buttons ...telegram.Button) error {
-	done := make(chan struct{})
+	done := make(chan bool, 1)
 	select {
 	case s.out <- outgoing{chat: chat, text: text, buttons: buttons, done: done}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 	select {
-	case <-done:
-		return nil
+	case ok := <-done:
+		if ok {
+			return nil
+		}
 	case <-ctx.Done():
-		return ctx.Err()
+		select {
+		case ok := <-done:
+			if ok {
+				return nil
+			}
+		default:
+		}
 	}
+	return context.Cause(ctx)
 }
 
 // deliver sends the queue in order, within Telegram's limits overall and
@@ -181,36 +197,38 @@ func (s *Service) deliver(ctx context.Context) {
 		if wait := s.Gap - time.Since(last[m.chat]); wait > 0 && !sleep(ctx, wait) {
 			return
 		}
-		s.post(ctx, m)
+		ok := s.post(ctx, m)
 		last[m.chat] = time.Now()
 		if m.done != nil {
-			close(m.done)
+			m.done <- ok
 		}
 	}
 }
 
 // post sends one message. It waits as long as Telegram asks and retries
 // failures that may pass; a message Telegram refuses, such as to a chat
-// that blocked the bot, is dropped.
-func (s *Service) post(ctx context.Context, m outgoing) {
+// that blocked the bot, is dropped. It reports false only when a shutdown
+// stopped it first.
+func (s *Service) post(ctx context.Context, m outgoing) bool {
 	backoff := time.Second
 	for ctx.Err() == nil {
 		err := s.Bot.Send(ctx, m.chat, m.text, m.buttons...)
 		var te *telegram.Error
 		switch {
 		case err == nil:
-			return
+			return true
 		case errors.As(err, &te) && te.RetryAfter > 0:
 			sleep(ctx, te.RetryAfter)
 		case errors.As(err, &te) && te.Code >= 400 && te.Code < 500:
 			s.Logf("telegram: chat %d: %v; message dropped", m.chat, err)
-			return
+			return true
 		default:
 			s.Logf("telegram: %v; retrying", err)
 			sleep(ctx, backoff)
 			backoff = min(2*backoff, time.Minute)
 		}
 	}
+	return false
 }
 
 // handle answers one message from a private chat with its owner; group

@@ -109,6 +109,9 @@ func TestRadarAlertsReachTheChannelOnceAcrossRestarts(t *testing.T) {
 	radar.add("🔻 OLDER -4.0% in 15m")
 	const channel = -1001234
 	tgURL, radarURL := tg.server(t).URL, radar.server(t).URL
+	var stop func()
+	// Stopped before the fake servers close, also when the test fails.
+	t.Cleanup(func() { stop() })
 	start := func() func() {
 		s := &Service{
 			Bot:    &telegram.Bot{BaseURL: tgURL, Token: "t", HTTP: http.DefaultClient},
@@ -121,7 +124,8 @@ func TestRadarAlertsReachTheChannelOnceAcrossRestarts(t *testing.T) {
 		wg.Add(2)
 		go func() { defer wg.Done(); s.deliver(ctx) }()
 		go func() { defer wg.Done(); s.radar(ctx) }()
-		return func() { cancel(); wg.Wait() }
+		var once sync.Once
+		return func() { once.Do(func() { cancel(); wg.Wait() }) }
 	}
 	wait := func(what string, n int) {
 		t.Helper()
@@ -132,13 +136,22 @@ func TestRadarAlertsReachTheChannelOnceAcrossRestarts(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	stop := start()
+	stop = start()
 	time.Sleep(100 * time.Millisecond)
 	if got := tg.texts(channel); len(got) != 0 {
 		t.Fatalf("alerts from before the first start were posted: %q", got)
 	}
 	radar.add("🚀 HYPE +5.2% in 15m · $81.40")
 	wait("the new alert", 1)
+	// The notifier is done with it once its cursor moves.
+	for begin := time.Now(); ; time.Sleep(10 * time.Millisecond) {
+		if cur, _, _ := st.RadarCursor(context.Background(), channel); cur == 3 {
+			break
+		}
+		if time.Since(begin) > 3*time.Second {
+			t.Fatal("the cursor did not move to the new alert")
+		}
+	}
 
 	// The notifier restarts. A fresh alert raised meanwhile goes out; a
 	// stale one is skipped; nothing repeats.
