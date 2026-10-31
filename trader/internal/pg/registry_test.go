@@ -91,9 +91,8 @@ func TestTenantsAndTheirKeysStayApart(t *testing.T) {
 	}
 }
 
-// The agent's last migration deletes the model and exchange keys and stops
-// the agents, and leaves wallets and the audit log alone.
-func TestTheAgentsKeysGoWithIt(t *testing.T) {
+// The old agent's keys, tables and functions go, and wallets stay.
+func TestTheOldAgentIsGone(t *testing.T) {
 	url := testkit.Database(t)
 	ctx := context.Background()
 	if err := migrate(ctx, url, 6); err != nil {
@@ -105,24 +104,23 @@ func TestTheAgentsKeysGoWithIt(t *testing.T) {
 	}
 	defer owner.Close(ctx)
 	tenant, agent := uuid.New(), uuid.New()
-	keys := map[string]uuid.UUID{"anthropic": uuid.New(), "binance": uuid.New(), "hyperliquid": uuid.New()}
 	if _, err := owner.Exec(ctx, "select ensure_event_partition('2026-10-30')"); err != nil {
 		t.Fatal(err)
 	}
-	steps := []struct {
+	for _, st := range []struct {
 		sql  string
 		args []any
 	}{
 		{"insert into tenants (id, name) values ($1, 'alice')", []any{tenant}},
 		{"insert into agents (id, tenant_id, name, mode, status) values ($1, $2, 'btc-eth', 'testnet', 'active')", []any{agent, tenant}},
 		{"insert into events (id, tenant_id, agent_id, seq, type, at, body, hash) values (gen_random_uuid(), $1, $2, 1, 'notice', '2026-10-30T00:00:00Z', '{}', '\\x00')", []any{tenant, agent}},
-	}
-	for _, st := range steps {
+	} {
 		if _, err := owner.Exec(ctx, st.sql, st.args...); err != nil {
 			t.Fatal(st.sql, err)
 		}
 	}
-	for kind, id := range keys {
+	for _, kind := range []string{"anthropic", "binance", "hyperliquid"} {
+		id := uuid.New()
 		if _, err := owner.Exec(ctx, `insert into credentials (id, tenant_id, kind, label, hint, ciphertext, nonce, wrapped_key, key_nonce, master_version)
 			values ($1, $2, $3, 'main', '…', '\x01', '\x01', '\x01', '\x01', 1)`, id, tenant, kind); err != nil {
 			t.Fatal(err)
@@ -136,19 +134,20 @@ func TestTheAgentsKeysGoWithIt(t *testing.T) {
 	if err := Migrate(ctx, url); err != nil {
 		t.Fatal(err)
 	}
-	var kinds []string
 	rows, _ := owner.Query(ctx, "select kind from credentials")
-	kinds, err = pgx.CollectRows(rows, pgx.RowTo[string])
+	kinds, err := pgx.CollectRows(rows, pgx.RowTo[string])
 	if err != nil || len(kinds) != 1 || kinds[0] != "hyperliquid" {
 		t.Fatalf("only the wallet is left: %v %v", kinds, err)
 	}
-	var attached, events int
-	var status string
-	owner.QueryRow(ctx, "select count(*) from agent_credentials").Scan(&attached)
-	owner.QueryRow(ctx, "select status from agents where id = $1", agent).Scan(&status)
-	owner.QueryRow(ctx, "select count(*) from events").Scan(&events)
-	if attached != 0 || status != "stopped" || events != 1 {
-		t.Fatalf("attached %d, agent %s, events %d", attached, status, events)
+	var left int
+	owner.QueryRow(ctx, `select count(*) from pg_class where relname in ('agents', 'agent_versions', 'agent_credentials', 'events', 'streams')
+		or relname like 'events\_%'`).Scan(&left)
+	var fns int
+	owner.QueryRow(ctx, "select count(*) from pg_proc where proname in ('runnable_agents', 'ensure_event_partition', 'forbid_change')").Scan(&fns)
+	var entitlements int
+	owner.QueryRow(ctx, "select count(*) from information_schema.columns where table_name = 'tenants' and column_name = 'entitlements'").Scan(&entitlements)
+	if left != 0 || fns != 0 || entitlements != 0 {
+		t.Fatalf("left: %d tables, %d functions, %d entitlements columns", left, fns, entitlements)
 	}
 }
 

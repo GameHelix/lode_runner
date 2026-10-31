@@ -86,11 +86,6 @@ func (c *Client) CreateTenant(ctx context.Context, t NewTenant) (Tenant, error) 
 	return out, c.do(ctx, http.MethodPost, "/v1/tenants", t, &out)
 }
 
-func (c *Client) Tenant(ctx context.Context, tenant string) (Tenant, error) {
-	var out Tenant
-	return out, c.do(ctx, http.MethodGet, tenantPath(tenant), nil, &out)
-}
-
 // CloseTenant closes an account for good: its wallet key is erased and its
 // name is gone.
 func (c *Client) CloseTenant(ctx context.Context, tenant string) (Tenant, error) {

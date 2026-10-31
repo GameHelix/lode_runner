@@ -63,11 +63,6 @@ paths:
   /v1/tenants/{tenant}:
     parameters:
       - $ref: "#/components/parameters/tenant"
-    get:
-      summary: Get a tenant
-      responses:
-        "200": {$ref: "#/components/responses/Tenant"}
-        "404": {$ref: "#/components/responses/Error"}
     delete:
       summary: Close a tenant for good
       description: Its wallet key is revoked and erased, and the tenant keeps its id but not its name. A closed tenant gets no new wallet and places no trades. Closing twice changes nothing more.
@@ -77,22 +72,6 @@ paths:
   /v1/tenants/{tenant}/wallet:
     parameters:
       - $ref: "#/components/parameters/tenant"
-    post:
-      summary: Make the account's agent wallet on Hyperliquid
-      description: The engine makes an agent wallet and keeps its key sealed; the account's own wallet approves it with the approvals below. An account has one wallet; a second request returns it.
-      responses:
-        "201":
-          description: The wallet, made now
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Wallet"}
-        "200":
-          description: The wallet the account already had
-          content:
-            application/json:
-              schema: {$ref: "#/components/schemas/Wallet"}
-        "404": {$ref: "#/components/responses/Error"}
-        "409": {$ref: "#/components/responses/Error"}
     get:
       summary: The wallet and, once approved, the account
       responses:

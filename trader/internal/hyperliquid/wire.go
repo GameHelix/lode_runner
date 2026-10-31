@@ -47,9 +47,8 @@ type Builder struct {
 
 // Groupings for an order batch.
 const (
-	GroupNone         = "na"
-	GroupNormalTPSL   = "normalTpsl"   // stops tied to the order in the same batch
-	GroupPositionTPSL = "positionTpsl" // stops on the whole position
+	GroupNone       = "na"
+	GroupNormalTPSL = "normalTpsl" // stops tied to the order in the same batch
 )
 
 // wire formats a number as the exchange hashes it: up to 8 decimals,

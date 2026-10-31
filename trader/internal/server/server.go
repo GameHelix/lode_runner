@@ -76,9 +76,7 @@ func (s *Server) routes() []route {
 		{pattern: "GET /v1/health", open: true, json: s.health},
 		{pattern: "GET /v1/openapi.yaml", open: true, raw: spec},
 		{pattern: "POST /v1/tenants", json: s.createTenant},
-		{pattern: "GET /v1/tenants/{tenant}", json: s.getTenant},
 		{pattern: "DELETE /v1/tenants/{tenant}", json: s.closeTenant},
-		{pattern: "POST /v1/tenants/{tenant}/wallet", json: s.createWallet},
 		{pattern: "GET /v1/tenants/{tenant}/wallet", notifier: true, json: s.getWallet},
 		{pattern: "GET /v1/tenants/{tenant}/wallet/approvals", json: s.walletApprovals},
 		{pattern: "POST /v1/tenants/{tenant}/wallet/approvals", json: s.approveWallet},
@@ -294,18 +292,6 @@ func (s *Server) createTenant(w http.ResponseWriter, r *http.Request) (int, any,
 		return 0, nil, err
 	}
 	return created(isNew), tenantOut(t), nil
-}
-
-func (s *Server) getTenant(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	ids, err := pathIDs(r, "tenant")
-	if err != nil {
-		return 0, nil, err
-	}
-	t, err := s.Fleet.Store.Tenant(r.Context(), ids[0])
-	if err != nil {
-		return 0, nil, err
-	}
-	return http.StatusOK, tenantOut(t), nil
 }
 
 func (s *Server) closeTenant(w http.ResponseWriter, r *http.Request) (int, any, error) {

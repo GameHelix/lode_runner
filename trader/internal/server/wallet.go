@@ -22,22 +22,6 @@ func walletOut(w fleet.Wallet, acct *hyperliquid.Account) api.Wallet {
 	return out
 }
 
-// createWallet makes the account's agent wallet, or returns the one it has.
-func (s *Server) createWallet(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	ids, err := pathIDs(r, "tenant")
-	if err != nil {
-		return 0, nil, err
-	}
-	if _, err := s.Fleet.Store.Tenant(r.Context(), ids[0]); err != nil {
-		return 0, nil, err
-	}
-	wl, isNew, err := s.Fleet.Wallet(r.Context(), ids[0])
-	if err != nil {
-		return 0, nil, err
-	}
-	return created(isNew), walletOut(wl, nil), nil
-}
-
 // getWallet reports the wallet and, once approved, the account.
 func (s *Server) getWallet(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	ids, err := pathIDs(r, "tenant")

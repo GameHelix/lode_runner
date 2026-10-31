@@ -74,9 +74,6 @@ func TestTenantsThroughTheAPI(t *testing.T) {
 	if again, err := c.CreateTenant(ctx, api.NewTenant{ID: tid, Name: "mallory"}); err != nil || again.Name != "alice@example.com" {
 		t.Fatalf("a retry returns the first tenant: %+v %v", again, err)
 	}
-	if got, err := c.Tenant(ctx, tid); err != nil || got != tn {
-		t.Fatalf("get: %+v %v", got, err)
-	}
 	closed, err := c.CloseTenant(ctx, tid)
 	if err != nil || closed.Status != "closed" || closed.Name != "" {
 		t.Fatalf("close: %+v %v", closed, err)
@@ -100,10 +97,10 @@ func TestTenantsThroughTheAPI(t *testing.T) {
 
 func TestBadRequestsGetClearErrors(t *testing.T) {
 	c, ctx := newClient(t), context.Background()
-	if _, err := c.Tenant(ctx, "not-a-uuid"); code(err) != "bad_request" {
+	if _, err := c.CloseTenant(ctx, "not-a-uuid"); code(err) != "bad_request" {
 		t.Fatalf("bad ID: %v", err)
 	}
-	if _, err := c.Tenant(ctx, uuid.NewString()); code(err) != "not_found" {
+	if _, err := c.Wallet(ctx, uuid.NewString()); code(err) != "not_found" {
 		t.Fatalf("unknown tenant: %v", err)
 	}
 	if _, err := c.CreateTenant(ctx, api.NewTenant{Name: " "}); code(err) != "refused" {
@@ -236,10 +233,8 @@ func TestTheNotifiersTokenOpensOnlyItsRoutes(t *testing.T) {
 		t.Fatalf("the notifier reads the wallet (none here): %d %s", status, code)
 	}
 	for _, rt := range []struct{ method, path, body string }{
-		{http.MethodGet, "/v1/tenants/" + tn.ID, ""},
 		{http.MethodDelete, "/v1/tenants/" + tn.ID, ""},
 		{http.MethodPost, "/v1/tenants", `{"name":"mallory"}`},
-		{http.MethodPost, "/v1/tenants/" + tn.ID + "/wallet", ""},
 		{http.MethodGet, "/v1/tenants/" + tn.ID + "/wallet/approvals?user=0x0000000000000000000000000000000000000001&mode=testnet", ""},
 	} {
 		if status, code := call(rt.method, rt.path, rt.body, notifierBearer); status != http.StatusForbidden || code != "forbidden" {

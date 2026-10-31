@@ -39,6 +39,6 @@ Every wallet key is sealed under a data key of its own, and only that data key i
 1. Make a new key: `openssl rand -base64 32`. In the server's settings file, `/srv/secrets/candylario.env`, set `ENGINE_MASTER_KEY=2:NEW` (the version before the colon, one more than the old one; a key without a version is version 1) and `ENGINE_MASTER_KEY_PREVIOUS=OLD`.
 2. `./deploy.sh trader deploy@SERVER`. New keys now seal under version 2; old rows still open.
 3. On the server: `cd /srv/trader && docker compose run --rm trader vault rewrap`. It prints how many keys it moved; run it again to see 0.
-4. Clear `ENGINE_MASTER_KEY_PREVIOUS` and deploy again. Keep the old key next to the backup key pair until every backup made under it has expired (30 days): a restored database from before the rewrap needs it in `ENGINE_MASTER_KEY_PREVIOUS` again.
+4. Clear `ENGINE_MASTER_KEY_PREVIOUS` and deploy again. Keep the old key until every backup made under it has expired (30 days): a restored database from before the rewrap needs it in `ENGINE_MASTER_KEY_PREVIOUS` again.
 
 `make check` in the repository root runs the tests.
