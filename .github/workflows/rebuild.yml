@@ -6,11 +6,18 @@ on:
         description: plan shows what would change; rebuild replaces the server, with the site down for about half an hour
         required: true
         type: choice
-        options: [plan, rebuild]
+        options: [plan, rebuild, resume]
+      from_run:
+        description: for resume, the id of the failed rebuild run whose OpenTofu state to finish from
+        required: false
+        type: string
 jobs:
   rebuild:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      actions: read
+      contents: read
     concurrency:
       group: deploy
     steps:
@@ -30,10 +37,18 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/id_ed25519
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - name: The failed run's OpenTofu state
+        if: inputs.confirm == 'resume'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FROM_RUN: ${{ inputs.from_run }}
+        run: gh run download "$FROM_RUN" -R "$GITHUB_REPOSITORY" -n tofu-state -D infra/hetzner
       - env:
           HOST: deploy@${{ vars.SERVER_IP }}
-          PLAN: ${{ inputs.confirm == 'plan' && '--plan' || '' }}
-        run: ./infra/hetzner/rebuild.sh "$HOST" $PLAN
+          # The token is a secret here, so a rebuild never depends on the server it replaces.
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+          MODE: ${{ inputs.confirm == 'plan' && '--plan' || inputs.confirm == 'resume' && '--resume' || '' }}
+        run: ./infra/hetzner/rebuild.sh "$HOST" $MODE
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
