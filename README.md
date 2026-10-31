@@ -10,9 +10,8 @@ A radar over every liquid Hyperliquid perpetual that posts unusual moves to Tele
 
 One Go module holds the three services; each builds its own image and runs as its own stack on one server. Settings live only on the server (`infra/README.md`, Settings).
 
-```sh
-make check                                              # tests; the Postgres ones need TEST_DATABASE_URL
-./deploy.sh trader|notifier|app deploy@91.99.222.102    # ships the pushed commit
-```
+Deploys run in GitHub Actions, never from a laptop. A push to main runs the tests and then ships the services it changed, engine first, with `deploy.sh`. The **deploy** workflow redeploys or rolls back one service by hand, and the **infra** workflow plans or applies OpenTofu. `./infra/actions-key.sh` gives Actions its SSH key to the server, once.
+
+`make check` runs the tests locally; the Postgres ones need `TEST_DATABASE_URL`.
 
 Until October 31, 2026 these were five repositories, candylario/trader, notifier, app, infra and research; their history stays there.

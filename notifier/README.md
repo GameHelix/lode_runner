@@ -17,6 +17,6 @@ docker compose run --rm notifier link --tenant TENANT_ID      # a one-time link 
 
 The app connects chats through the notifier's API on `127.0.0.1:8081` (`notifier:8080` on the shared network) with `Authorization: Bearer $NOTIFIER_API_TOKEN`: `POST /v1/tenants/ID/links` gives a one-time link, `GET /v1/tenants/ID/chats` lists the chats connected and `DELETE /v1/tenants/ID/chats/CHAT` disconnects one. The contract is [api/openapi.yaml](api/openapi.yaml).
 
-On a server prepared by [infra](../infra): `./deploy.sh notifier deploy@SERVER_IP` from the repository root deploys the pushed commit, tagged with it and reported by `/v1/health`, and `./deploy.sh notifier --rollback deploy@SERVER_IP` runs the previous image again.
+On a server prepared by [infra](../infra): a push to main deploys it through GitHub Actions; underneath, `./deploy.sh notifier deploy@SERVER_IP` from the repository root deploys the pushed commit, tagged with it and reported by `/v1/health`, and `./deploy.sh notifier --rollback deploy@SERVER_IP` runs the previous image again.
 
 Tests need Postgres: `TEST_DATABASE_URL=postgres://... go test ./...`

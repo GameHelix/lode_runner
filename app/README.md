@@ -15,6 +15,6 @@ docker compose up -d --build                      # needs the shared network: do
 open http://127.0.0.1:3000
 ```
 
-On a server prepared by [infra](../infra): `./deploy.sh app deploy@SERVER_IP` from the repository root deploys the pushed commit, and `./deploy.sh app --rollback deploy@SERVER_IP` runs the previous image again. `/healthz` reports the commit each service runs. For HTTPS, point a domain's A record at the server and set `APP_DOMAIN`, `APP_BASE_URL=https://DOMAIN` and `COMPOSE_PROFILES=public` in its settings; Caddy gets the certificate and redirects `www.`.
+On a server prepared by [infra](../infra): a push to main deploys it through GitHub Actions; underneath, `./deploy.sh app deploy@SERVER_IP` from the repository root deploys the pushed commit, and `./deploy.sh app --rollback deploy@SERVER_IP` runs the previous image again. `/healthz` reports the commit each service runs. For HTTPS, point a domain's A record at the server and set `APP_DOMAIN`, `APP_BASE_URL=https://DOMAIN` and `COMPOSE_PROFILES=public` in its settings; Caddy gets the certificate and redirects `www.`.
 
 The app calls the engine through its `api` package in [../trader/api](../trader/api). Tests need Postgres: `TEST_DATABASE_URL=postgres://... go test ./...`

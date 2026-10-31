@@ -56,7 +56,8 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 git fetch -q
 commit=$(git rev-parse --short=12 HEAD)
-if ! git merge-base --is-ancestor HEAD '@{upstream}'; then
+upstream=$(git rev-parse --abbrev-ref '@{upstream}' 2>/dev/null || echo origin/main)
+if ! git merge-base --is-ancestor HEAD "$upstream"; then
   echo "commit $commit is not pushed; git push first" >&2
   exit 1
 fi

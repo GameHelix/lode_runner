@@ -25,7 +25,7 @@ tofu apply -var host=SERVER_IP -var 'ssh_public_keys=["ssh-ed25519 AAAA... you"]
 
 The first run logs in as the provider's user, often root; from the second run on, add `-var user=deploy`.
 
-At Hetzner, the state, the variables (`ssh_public_keys`, `admin_cidrs`) and the API token stay on the server in `/srv/secrets` (see Settings), and `hetzner/tofu.sh` runs OpenTofu here with them, deleting its copies afterwards:
+At Hetzner, the state, the variables (`ssh_public_keys`, `admin_cidrs`) and the API token stay on the server in `/srv/secrets` (see Settings). `hetzner/tofu.sh` runs OpenTofu with them and deletes its copies afterwards; the **infra** workflow in GitHub Actions runs it, a plan by default and an apply with its box ticked. From a machine with SSH to the server it runs the same way:
 
 ```sh
 ./hetzner/tofu.sh deploy@91.99.222.102 plan
@@ -34,7 +34,7 @@ At Hetzner, the state, the variables (`ssh_public_keys`, `admin_cidrs`) and the 
 
 The server is a cax11 (Arm, 2 vCPU, 4 GB) in Falkenstein; `-var location=hel1` and `-var server_type=...` change that. The very first apply, before the server exists, runs `tofu` in `hetzner/` directly with `HCLOUD_TOKEN` exported and the variables given with `-var`.
 
-Then deploy the services over SSH from the repository root: `./deploy.sh trader|notifier|app deploy@SERVER_IP`.
+Then run `./actions-key.sh deploy@SERVER_IP` once, which gives GitHub Actions its SSH key to the server, and push: Actions deploys the services (`deploy.sh trader|notifier|app deploy@SERVER_IP` underneath).
 
 ## The server's address
 

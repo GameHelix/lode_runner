@@ -15,7 +15,7 @@ docker compose up -d --build        # the radar and the engine API
 
 ## Server
 
-Any server prepared by [infra](../infra), at any cloud or your own, runs the engine. From the repository root:
+Any server prepared by [infra](../infra), at any cloud or your own, runs the engine. A push to main deploys it through GitHub Actions, and the **deploy** workflow rolls it back; underneath, from the repository root:
 
 ```sh
 ./deploy.sh trader deploy@SERVER_IP              # builds the pushed commit for the server's CPU; ships the image, compose.yaml and the settings over SSH

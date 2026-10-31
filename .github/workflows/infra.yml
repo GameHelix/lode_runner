@@ -1,28 +1,36 @@
 name: infra
 on:
-  push:
-    branches: [main]
-    paths: ["infra/**"]
-  pull_request:
-    paths: ["infra/**"]
-defaults:
-  run:
-    working-directory: infra
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply the changes; without it, only plan
+        type: boolean
+        default: false
 jobs:
-  validate:
+  tofu:
     runs-on: ubuntu-latest
+    concurrency:
+      group: infra
     steps:
       - uses: actions/checkout@v4
       - uses: opentofu/setup-opentofu@v1
         with:
           tofu_wrapper: false
-      - run: tofu fmt -check -recursive
-      - run: tofu -chdir=existing init -backend=false -input=false && tofu -chdir=existing validate
-      - run: tofu -chdir=hetzner init -backend=false -input=false && tofu -chdir=hetzner validate
-      - run: tofu -chdir=modules/host init -input=false && tofu -chdir=modules/host test
-      - name: shellcheck the rendered bootstrap
+      - name: SSH to the server
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
         run: |
-          cd modules/host/tests/render
-          tofu init -input=false
-          tofu apply -auto-approve -input=false
-          tofu output -raw user_data | shellcheck -s bash -
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - env:
+          HOST: deploy@${{ vars.SERVER_IP }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          if [ "$APPLY" = true ]; then
+            ./infra/hetzner/tofu.sh "$HOST" apply -input=false -auto-approve -no-color
+          else
+            ./infra/hetzner/tofu.sh "$HOST" plan -input=false -no-color
+          fi
