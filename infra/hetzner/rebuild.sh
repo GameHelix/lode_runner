@@ -11,18 +11,36 @@
 # environment, since the server that held the token is gone; the tfvars are
 # rebuilt from the state, which holds the SSH public keys, and the services
 # come back from the newest backup on the volume. If Hetzner cannot place the
-# server type asked for, a rebuild falls back to the type the server had.
+# server type asked for, a rebuild falls back to the type the server had. Once
+# the new server works, the rebuild deletes the snapshots taken before
+# rebuilds; --cleanup deletes them alone.
 #
-#   ./hetzner/rebuild.sh deploy@SERVER [--plan|--resume]
+#   ./hetzner/rebuild.sh deploy@SERVER [--plan|--resume|--cleanup]
 # shellcheck disable=SC2029 # the paths are meant to expand here, before ssh.
 set -euo pipefail
-host=${1:?usage: ./hetzner/rebuild.sh deploy@SERVER [--plan|--resume]}
+host=${1:?usage: ./hetzner/rebuild.sh deploy@SERVER [--plan|--resume|--cleanup]}
 mode=${2:-}
 user=${host%%@*} ip=${host#*@}
 cd "$(dirname "$0")"
 remote=/srv/secrets/infra
 began=$(date +%s)
 step() { echo "== $(($(date +%s) - began))s: $*"; }
+
+api() { curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" -H 'Content-Type: application/json' "https://api.hetzner.cloud/v1$1" "${@:2}"; }
+# The snapshots a rebuild takes before it starts, deleted once a rebuild has left
+# a working server: they are a fallback for a failed rebuild, and Hetzner bills them.
+delete_snapshots() {
+  local id
+  for id in $(api '/images?type=snapshot&label_selector=project%3Dcandylario' | jq -r '.images[] | select(.description == "before rebuild") | .id'); do
+    api "/images/$id" -X DELETE >/dev/null
+    echo "deleted snapshot $id"
+  done
+}
+if [ "$mode" = --cleanup ]; then
+  : "${HCLOUD_TOKEN:?--cleanup needs HCLOUD_TOKEN in the environment}"
+  delete_snapshots
+  exit
+fi
 
 trap 'rm -f terraform.tfvars' EXIT
 if [ "$mode" = --resume ]; then
@@ -43,7 +61,6 @@ if [ "$mode" = --plan ]; then
   exit
 fi
 
-api() { curl -fsS -H "Authorization: Bearer $HCLOUD_TOKEN" -H 'Content-Type: application/json' "https://api.hetzner.cloud/v1$1" "${@:2}"; }
 settle() {
   local status
   for _ in $(seq 180); do
@@ -61,7 +78,7 @@ step "snapshot the server at Hetzner, in case the rebuild fails"
 server=$(api /servers | jq -r --arg ip "$ip" '.servers[] | select(.public_net.ipv4.ip == $ip) | .id')
 snapshot=$(api "/servers/$server/actions/create_image" -X POST -d '{"type":"snapshot","description":"before rebuild","labels":{"project":"candylario"}}')
 settle "$(jq -r .action.id <<<"$snapshot")"
-echo "snapshot $(jq -r .image.id <<<"$snapshot"); delete it once the new server works"
+echo "snapshot $(jq -r .image.id <<<"$snapshot"); deleted at the end, once the new server works"
 
 step "stop the services and back them up to the volume"
 restart() { ssh "$host" 'sudo mount /mnt/backup 2>/dev/null; for s in trader notifier app; do (cd "/srv/$s" && docker compose start "$s" </dev/null); done'; }
@@ -145,3 +162,6 @@ curl -fsS --max-time 10 "https://$domain/healthz"
 echo
 step "rebuilt. The new host key, for the DEPLOY_KNOWN_HOSTS secret:"
 ssh-keyscan -t ed25519 "$ip" 2>/dev/null
+
+step "delete the snapshots taken before rebuilds, now that the new server works"
+delete_snapshots

@@ -6,7 +6,7 @@ on:
         description: plan shows what would change; rebuild replaces the server, with the site down for about half an hour
         required: true
         type: choice
-        options: [plan, rebuild, resume]
+        options: [plan, rebuild, resume, cleanup]
       from_run:
         description: for resume, the id of the failed rebuild run whose OpenTofu state to finish from
         required: false
@@ -47,7 +47,7 @@ jobs:
           HOST: deploy@${{ vars.SERVER_IP }}
           # The token is a secret here, so a rebuild never depends on the server it replaces.
           HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
-          MODE: ${{ inputs.confirm == 'plan' && '--plan' || inputs.confirm == 'resume' && '--resume' || '' }}
+          MODE: ${{ inputs.confirm == 'plan' && '--plan' || inputs.confirm == 'resume' && '--resume' || inputs.confirm == 'cleanup' && '--cleanup' || '' }}
         run: ./infra/hetzner/rebuild.sh "$HOST" $MODE
       - if: failure()
         uses: actions/upload-artifact@v4

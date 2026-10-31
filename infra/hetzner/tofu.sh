@@ -24,7 +24,8 @@ finish() {
   rm -f terraform.tfstate terraform.tfstate.backup terraform.tfvars
 }
 trap finish EXIT
-HCLOUD_TOKEN=$(ssh "$host" "sed -n 's/^HCLOUD_TOKEN=//p' /srv/secrets/candylario.env")
+# The infra workflow passes the repository secret; the server's copy is the fallback.
+HCLOUD_TOKEN=${HCLOUD_TOKEN:-$(ssh "$host" "sed -n 's/^HCLOUD_TOKEN=//p' /srv/secrets/candylario.env")}
 export HCLOUD_TOKEN
 tofu init -input=false >/dev/null
 tofu "$@"

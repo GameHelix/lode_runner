@@ -28,6 +28,8 @@ jobs:
       - env:
           HOST: deploy@${{ vars.SERVER_IP }}
           APPLY: ${{ inputs.apply }}
+          # The token is a secret here, so the infra never depends on the server for it.
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
         run: |
           if [ "$APPLY" = true ]; then
             ./infra/hetzner/tofu.sh "$HOST" apply -input=false -auto-approve -no-color
