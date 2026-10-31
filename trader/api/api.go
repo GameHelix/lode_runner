@@ -192,8 +192,10 @@ type NewTrade struct {
 	SlippagePct   float64 `json:"slippage_pct,omitempty"`
 }
 
-// Trade is an opened position with its orders on the exchange.
+// Trade is an opened position with its orders on the exchange. Mode is
+// the exchange it is on: testnet or mainnet.
 type Trade struct {
+	Mode          string  `json:"mode"`
 	Coin          string  `json:"coin"`
 	Side          string  `json:"side"`
 	Size          float64 `json:"size"`
@@ -215,6 +217,7 @@ type CloseTrade struct {
 
 // ClosedTrade is the result of a close. Remaining is what did not fill.
 type ClosedTrade struct {
+	Mode           string  `json:"mode"`
 	Coin           string  `json:"coin"`
 	Size           float64 `json:"size"`
 	AvgPx          float64 `json:"avg_px"`

@@ -32,8 +32,10 @@ type TradeRequest struct {
 	SlippagePct   float64 // how far from the mid price the market order may fill; 0.01 by default
 }
 
-// Trade is an opened position with its orders on the exchange.
+// Trade is an opened position with its orders on the exchange. Mode is
+// the exchange it is on: testnet or mainnet.
 type Trade struct {
+	Mode          string
 	Coin          string
 	Side          string
 	Size          float64
@@ -49,6 +51,7 @@ type Trade struct {
 
 // Closed is the result of closing a position.
 type Closed struct {
+	Mode           string
 	Coin           string
 	Size           float64 // what the close filled
 	AvgPx          float64
@@ -217,7 +220,7 @@ func (s *Service) OpenTrade(ctx context.Context, tenant uuid.UUID, r TradeReques
 		cancelResting(ctx, ex, asset.Index, placed[1:])
 		return Trade{}, refusef("%s did not fill within %.1f%% of the price; try again", r.Coin, r.SlippagePct*100)
 	}
-	t := Trade{Coin: r.Coin, Side: r.Side, Size: main.Filled, EntryPx: main.AvgPx, USD: main.Filled * main.AvgPx, Leverage: r.Leverage, OID: main.OID, StopPx: stopPx, StopOID: placed[1].OID}
+	t := Trade{Mode: w.Mode, Coin: r.Coin, Side: r.Side, Size: main.Filled, EntryPx: main.AvgPx, USD: main.Filled * main.AvgPx, Leverage: r.Leverage, OID: main.OID, StopPx: stopPx, StopOID: placed[1].OID}
 	if len(placed) > 2 {
 		t.TakeProfitPx, t.TakeProfitOID = tpPx, placed[2].OID
 	}
@@ -280,7 +283,7 @@ func (s *Service) CloseTrade(ctx context.Context, tenant uuid.UUID, coin string,
 	if placed[0].Error != "" {
 		return Closed{}, refusef("the exchange refused the close: %s", placed[0].Error)
 	}
-	c := Closed{Coin: coin, Size: placed[0].Filled, AvgPx: placed[0].AvgPx, Remaining: size - placed[0].Filled}
+	c := Closed{Mode: w.Mode, Coin: coin, Size: placed[0].Filled, AvgPx: placed[0].AvgPx, Remaining: size - placed[0].Filled}
 	if c.Remaining > 0 {
 		return c, nil // the stops still guard what is left
 	}

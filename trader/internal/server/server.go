@@ -27,7 +27,8 @@ type Server struct {
 	Fleet *fleet.Service
 	Token string
 	// NotifierToken, when set, opens only what the notifier needs: the
-	// radar and a tenant's trades. Every other route refuses it.
+	// radar, a tenant's wallet and its trades. Every other route refuses
+	// it.
 	NotifierToken string
 	// Commit is the source commit the engine was built from, for the
 	// health check.
@@ -78,7 +79,7 @@ func (s *Server) routes() []route {
 		{pattern: "GET /v1/tenants/{tenant}", json: s.getTenant},
 		{pattern: "DELETE /v1/tenants/{tenant}", json: s.closeTenant},
 		{pattern: "POST /v1/tenants/{tenant}/wallet", json: s.createWallet},
-		{pattern: "GET /v1/tenants/{tenant}/wallet", json: s.getWallet},
+		{pattern: "GET /v1/tenants/{tenant}/wallet", notifier: true, json: s.getWallet},
 		{pattern: "GET /v1/tenants/{tenant}/wallet/approvals", json: s.walletApprovals},
 		{pattern: "POST /v1/tenants/{tenant}/wallet/approvals", json: s.approveWallet},
 		{pattern: "POST /v1/tenants/{tenant}/trades", notifier: true, json: s.openTrade},

@@ -22,7 +22,7 @@ func (s *Server) openTrade(w http.ResponseWriter, r *http.Request) (int, any, er
 	if err != nil {
 		return 0, nil, err
 	}
-	return http.StatusOK, api.Trade{Coin: t.Coin, Side: t.Side, Size: t.Size, EntryPx: t.EntryPx, USD: t.USD, Leverage: t.Leverage, OID: t.OID,
+	return http.StatusOK, api.Trade{Mode: t.Mode, Coin: t.Coin, Side: t.Side, Size: t.Size, EntryPx: t.EntryPx, USD: t.USD, Leverage: t.Leverage, OID: t.OID,
 		StopPx: t.StopPx, StopOID: t.StopOID, TakeProfitPx: t.TakeProfitPx, TakeProfitOID: t.TakeProfitOID}, nil
 }
 
@@ -40,5 +40,5 @@ func (s *Server) closeTrade(w http.ResponseWriter, r *http.Request) (int, any, e
 	if err != nil {
 		return 0, nil, err
 	}
-	return http.StatusOK, api.ClosedTrade{Coin: c.Coin, Size: c.Size, AvgPx: c.AvgPx, Remaining: c.Remaining, StopsCancelled: c.StopsCancelled}, nil
+	return http.StatusOK, api.ClosedTrade{Mode: c.Mode, Coin: c.Coin, Size: c.Size, AvgPx: c.AvgPx, Remaining: c.Remaining, StopsCancelled: c.StopsCancelled}, nil
 }

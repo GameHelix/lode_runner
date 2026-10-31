@@ -33,15 +33,31 @@ type Chat struct {
 }
 
 type Message struct {
-	From *User  `json:"from"`
-	Chat Chat   `json:"chat"`
-	Date int64  `json:"date"`
-	Text string `json:"text"`
+	MessageID int64  `json:"message_id"`
+	From      *User  `json:"from"`
+	Chat      Chat   `json:"chat"`
+	Date      int64  `json:"date"`
+	Text      string `json:"text"`
+}
+
+// Callback is a tap on a button under one of the bot's messages.
+type Callback struct {
+	ID      string   `json:"id"`
+	From    *User    `json:"from"`
+	Message *Message `json:"message"`
+	Data    string   `json:"data"`
 }
 
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message"`
+	UpdateID int64     `json:"update_id"`
+	Message  *Message  `json:"message"`
+	Callback *Callback `json:"callback_query"`
+}
+
+// Button is a button under a message; a tap sends Data back as a Callback.
+type Button struct {
+	Text string `json:"text"`
+	Data string `json:"callback_data"`
 }
 
 // Error is a call Telegram refused. RetryAfter is set when it asks to slow
@@ -116,15 +132,35 @@ func (b *Bot) Updates(ctx context.Context, offset int64, wait time.Duration) ([]
 	ctx, cancel := context.WithTimeout(ctx, wait+20*time.Second)
 	defer cancel()
 	var ups []Update
-	return ups, b.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": int(wait.Seconds()), "allowed_updates": []string{"message"}}, &ups)
+	return ups, b.call(ctx, "getUpdates", map[string]any{"offset": offset, "timeout": int(wait.Seconds()), "allowed_updates": []string{"message", "callback_query"}}, &ups)
 }
 
-// Send posts plain text to a chat, cut to Telegram's message limit.
-func (b *Bot) Send(ctx context.Context, chat int64, text string) error {
+func cut(text string) string {
 	if r := []rune(text); len(r) > 4000 {
-		text = string(r[:4000]) + "…"
+		return string(r[:4000]) + "…"
 	}
-	return b.call(ctx, "sendMessage", map[string]any{"chat_id": chat, "text": text, "link_preview_options": map[string]bool{"is_disabled": true}}, nil)
+	return text
+}
+
+// Send posts plain text to a chat, cut to Telegram's message limit, with a
+// row of buttons when given.
+func (b *Bot) Send(ctx context.Context, chat int64, text string, buttons ...Button) error {
+	params := map[string]any{"chat_id": chat, "text": cut(text), "link_preview_options": map[string]bool{"is_disabled": true}}
+	if len(buttons) > 0 {
+		params["reply_markup"] = map[string]any{"inline_keyboard": [][]Button{buttons}}
+	}
+	return b.call(ctx, "sendMessage", params, nil)
+}
+
+// Edit replaces a message's text, and with it the buttons it had.
+func (b *Bot) Edit(ctx context.Context, chat, message int64, text string) error {
+	return b.call(ctx, "editMessageText", map[string]any{"chat_id": chat, "message_id": message, "text": cut(text), "link_preview_options": map[string]bool{"is_disabled": true}}, nil)
+}
+
+// Answer ends the spinner on a tapped button, showing text briefly when
+// given.
+func (b *Bot) Answer(ctx context.Context, callback, text string) error {
+	return b.call(ctx, "answerCallbackQuery", map[string]any{"callback_query_id": callback, "text": text}, nil)
 }
 
 // Command is an entry in the bot's command menu.

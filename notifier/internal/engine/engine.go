@@ -1,5 +1,6 @@
 // Package engine calls the Candylario engine API: the radar's alerts as a
-// stream. Its contract is the engine's openapi.yaml.
+// stream, and a tenant's wallet and trades. Its contract is the engine's
+// openapi.yaml.
 package engine
 
 import (
@@ -11,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -83,14 +85,21 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 }
 
 // RadarAlert is one unusual move the engine's radar raised. Text is the
-// alert as a chat shows it.
+// alert as a chat shows it; Suggestion, when present, is the trade its
+// record argues for.
 type RadarAlert struct {
-	Seq       int64     `json:"seq"`
-	At        time.Time `json:"at"`
-	Coin      string    `json:"coin"`
-	Change15m float64   `json:"change_15m"`
-	Change1h  float64   `json:"change_1h"`
-	Text      string    `json:"text"`
+	Seq        int64       `json:"seq"`
+	At         time.Time   `json:"at"`
+	Coin       string      `json:"coin"`
+	Change15m  float64     `json:"change_15m"`
+	Change1h   float64     `json:"change_1h"`
+	Text       string      `json:"text"`
+	Suggestion *Suggestion `json:"suggestion"`
+}
+
+type Suggestion struct {
+	Side        string  `json:"side"`
+	StopLossPct float64 `json:"stop_loss_pct"`
 }
 
 // RadarStream passes the radar's alerts numbered above after, as they are
@@ -117,6 +126,75 @@ func (c *Client) RadarSeq(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 	return out.Alerts[0].Seq, nil
+}
+
+func tenantPath(tenant, rest string) string {
+	return "/v1/tenants/" + url.PathEscape(tenant) + rest
+}
+
+// Trade is a position the engine opened, with its stop-loss on the
+// exchange. Mode is testnet or mainnet.
+type Trade struct {
+	Mode     string  `json:"mode"`
+	Coin     string  `json:"coin"`
+	Side     string  `json:"side"`
+	Size     float64 `json:"size"`
+	EntryPx  float64 `json:"entry_px"`
+	USD      float64 `json:"usd"`
+	Leverage int     `json:"leverage"`
+	StopPx   float64 `json:"stop_px"`
+}
+
+// OpenTrade opens a position from the tenant's wallet: a market order of
+// usd with its stop-loss, stop a fraction of the entry price.
+func (c *Client) OpenTrade(ctx context.Context, tenant, coin, side string, usd float64, leverage int, stop float64) (Trade, error) {
+	body := map[string]any{"coin": coin, "side": side, "usd": usd, "leverage": leverage, "stop_loss_pct": stop}
+	var out Trade
+	return out, c.do(ctx, http.MethodPost, tenantPath(tenant, "/trades"), body, &out)
+}
+
+// Closed is what a close did; Remaining is what did not fill.
+type Closed struct {
+	Mode           string  `json:"mode"`
+	Coin           string  `json:"coin"`
+	Size           float64 `json:"size"`
+	AvgPx          float64 `json:"avg_px"`
+	Remaining      float64 `json:"remaining"`
+	StopsCancelled int     `json:"stops_cancelled"`
+}
+
+// CloseTrade closes the tenant's position in a coin and cancels its stops.
+func (c *Client) CloseTrade(ctx context.Context, tenant, coin string) (Closed, error) {
+	var out Closed
+	return out, c.do(ctx, http.MethodPost, tenantPath(tenant, "/trades/close"), map[string]string{"coin": coin}, &out)
+}
+
+// Wallet is the tenant's agent wallet and, once approved, its account.
+type Wallet struct {
+	AgentApproved bool     `json:"agent_approved"`
+	Mode          string   `json:"mode"`
+	Account       *Account `json:"account"`
+}
+
+type Account struct {
+	Value        float64    `json:"value"`
+	Withdrawable float64    `json:"withdrawable"`
+	Positions    []Position `json:"positions"`
+}
+
+// Position is an open position; Size is negative when short.
+type Position struct {
+	Coin          string  `json:"coin"`
+	Size          float64 `json:"size"`
+	EntryPx       float64 `json:"entry_px"`
+	UnrealizedPnl float64 `json:"unrealized_pnl"`
+	LiquidationPx float64 `json:"liquidation_px"`
+	Leverage      int     `json:"leverage"`
+}
+
+func (c *Client) Wallet(ctx context.Context, tenant string) (Wallet, error) {
+	var out Wallet
+	return out, c.do(ctx, http.MethodGet, tenantPath(tenant, "/wallet"), nil, &out)
 }
 
 // stream reads server-sent events from path and gives fn each data field.

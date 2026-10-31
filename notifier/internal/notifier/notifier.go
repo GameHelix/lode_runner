@@ -1,6 +1,7 @@
 // Package notifier runs the Candylario bot. It posts the engine's radar
-// alerts to the radar channel, in order, with retries, and never twice, and
-// connects private chats to accounts with one-time links from the app.
+// alerts to the radar channel and to every private chat connected to an
+// account, in order, with retries, and never twice; in a connected chat
+// each alert has buttons that trade it from the account's wallet.
 package notifier
 
 import (
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/candylario/candylario/notifier/internal/engine"
@@ -32,24 +34,33 @@ type Service struct {
 
 	name string
 	out  chan outgoing
+	mu   sync.Mutex
+	// tapped holds the alerts already traded from, by chat and message,
+	// so a second tap does not trade twice.
+	tapped map[[2]int64]time.Time
 }
 
 type outgoing struct {
-	chat int64
-	text string
-	done chan struct{}
+	chat    int64
+	text    string
+	buttons []telegram.Button
+	done    chan struct{}
 }
 
-const helpText = `This bot posts the Candylario radar: unusual moves on Hyperliquid perpetuals, each with what followed such moves before.
+const helpText = `This bot posts the Candylario radar: unusual moves on Hyperliquid perpetuals, each with what followed such moves before. In a chat connected to your account, each alert has buttons that trade it from your wallet: Long $25, Short $25 or Ignore.
+/positions – your open positions
+/close COIN – close a position and cancel its stops
 /disconnect – stop updates in this chat`
 
 var menu = []telegram.Command{
+	{Command: "positions", Description: "Your open positions"},
+	{Command: "close", Description: "Close a position: /close ETH"},
 	{Command: "help", Description: "What I can do"},
 	{Command: "disconnect", Description: "Stop updates in this chat"},
 }
 
 const (
-	description      = "The Candylario radar: unusual moves on Hyperliquid perpetuals as they happen, each with the record of what followed such moves before. Connect this chat from the Candylario app."
+	description      = "The Candylario radar: unusual moves on Hyperliquid perpetuals as they happen, each with the record of what followed such moves before. Connect this chat from the Candylario app to trade an alert with one tap."
 	shortDescription = "Unusual moves on Hyperliquid perpetuals, as they happen."
 )
 
@@ -64,6 +75,7 @@ func (s *Service) defaults() {
 		s.Rate = 25
 	}
 	s.out = make(chan outgoing, 1000)
+	s.tapped = map[[2]int64]time.Time{}
 }
 
 // Run serves until ctx ends.
@@ -78,9 +90,7 @@ func (s *Service) Run(ctx context.Context) error {
 		s.Logf("bot profile: %v", err)
 	}
 	go s.deliver(ctx)
-	if s.RadarChannel != 0 {
-		go s.radar(ctx)
-	}
+	go s.radar(ctx)
 	s.Logf("notifier running as @%s", s.name)
 	return s.listen(ctx)
 }
@@ -110,8 +120,11 @@ func (s *Service) listen(ctx context.Context) error {
 			continue
 		}
 		for _, u := range ups {
-			if u.Message != nil {
+			switch {
+			case u.Message != nil:
 				s.handle(ctx, *u.Message)
+			case u.Callback != nil:
+				s.tap(ctx, *u.Callback)
 			}
 			offset = u.UpdateID + 1
 			if err := s.Store.SetOffset(ctx, s.name, offset); err != nil {
@@ -130,11 +143,12 @@ func (s *Service) say(ctx context.Context, chat int64, text string) {
 	}
 }
 
-// send queues a message and waits until it is delivered or dropped.
-func (s *Service) send(ctx context.Context, chat int64, text string) error {
+// send queues a message, with buttons when given, and waits until it is
+// delivered or dropped.
+func (s *Service) send(ctx context.Context, chat int64, text string, buttons ...telegram.Button) error {
 	done := make(chan struct{})
 	select {
-	case s.out <- outgoing{chat: chat, text: text, done: done}:
+	case s.out <- outgoing{chat: chat, text: text, buttons: buttons, done: done}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -181,7 +195,7 @@ func (s *Service) deliver(ctx context.Context) {
 func (s *Service) post(ctx context.Context, m outgoing) {
 	backoff := time.Second
 	for ctx.Err() == nil {
-		err := s.Bot.Send(ctx, m.chat, m.text)
+		err := s.Bot.Send(ctx, m.chat, m.text, m.buttons...)
 		var te *telegram.Error
 		switch {
 		case err == nil:
@@ -218,7 +232,7 @@ func (s *Service) handle(ctx context.Context, m telegram.Message) {
 		s.start(ctx, m, arg)
 		return
 	}
-	_, err := s.Store.Link(ctx, chat)
+	link, err := s.Store.Link(ctx, chat)
 	if errors.Is(err, store.ErrNotLinked) {
 		s.say(ctx, chat, "This chat is not connected. Open the link from the Candylario app.")
 		return
@@ -228,7 +242,16 @@ func (s *Service) handle(ctx context.Context, m telegram.Message) {
 		s.say(ctx, chat, "⚠️ Something went wrong; try again in a minute.")
 		return
 	}
+	sent := time.Unix(m.Date, 0)
 	switch name {
+	case "positions":
+		s.positions(ctx, chat, link.Tenant.String())
+	case "close":
+		if time.Since(sent) > 10*time.Minute {
+			s.say(ctx, chat, fmt.Sprintf("⚠️ Ignored /close: it was sent at %s, while I was offline.", sent.UTC().Format("Jan 2 15:04 UTC")))
+			return
+		}
+		s.closePosition(ctx, chat, link.Tenant.String(), arg)
 	case "disconnect":
 		if err := s.Store.Unlink(ctx, chat); err != nil {
 			s.Logf("database: %v", err)
@@ -266,5 +289,5 @@ func (s *Service) start(ctx context.Context, m telegram.Message, code string) {
 		return
 	}
 	s.Logf("chat %d connected to tenant %s", chat, l.Tenant)
-	s.say(ctx, chat, "✅ Connected.\n\n"+helpText)
+	s.say(ctx, chat, "✅ Connected. Alerts arrive here from now on.\n\n"+helpText)
 }

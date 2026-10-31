@@ -223,7 +223,7 @@ components:
     token:
       type: http
       scheme: bearer
-      description: ENGINE_API_TOKEN opens every route. ENGINE_NOTIFIER_TOKEN, the notifier's, opens only the radar and a tenant's trades; elsewhere it gets 403 forbidden.
+      description: ENGINE_API_TOKEN opens every route. ENGINE_NOTIFIER_TOKEN, the notifier's, opens only the radar, a tenant's wallet and its trades; elsewhere it gets 403 forbidden.
   parameters:
     tenant:
       name: tenant
@@ -264,8 +264,9 @@ components:
         slippage_pct: {type: number, description: How far from the mid price the order may fill; 0.01 by default.}
     Trade:
       type: object
-      required: [coin, side, size, entry_px, usd, leverage, oid, stop_px, stop_oid]
+      required: [mode, coin, side, size, entry_px, usd, leverage, oid, stop_px, stop_oid]
       properties:
+        mode: {type: string, enum: [testnet, mainnet]}
         coin: {type: string}
         side: {type: string, enum: [long, short]}
         size: {type: number, description: In the coin.}
@@ -285,8 +286,9 @@ components:
         slippage_pct: {type: number}
     ClosedTrade:
       type: object
-      required: [coin, size, avg_px, remaining, stops_cancelled]
+      required: [mode, coin, size, avg_px, remaining, stops_cancelled]
       properties:
+        mode: {type: string, enum: [testnet, mainnet]}
         coin: {type: string}
         size: {type: number}
         avg_px: {type: number}

@@ -231,12 +231,14 @@ func TestTheNotifiersTokenOpensOnlyItsRoutes(t *testing.T) {
 	if status, code := call(http.MethodPost, "/v1/tenants/"+tn.ID+"/trades/close", `{"coin":"ETH"}`, notifierBearer); status != http.StatusUnprocessableEntity || code != "refused" {
 		t.Fatalf("the notifier closes trades (refused here: no wallet): %d %s", status, code)
 	}
+	if status, code := call(http.MethodGet, "/v1/tenants/"+tn.ID+"/wallet", "", notifierBearer); status != http.StatusNotFound || code != "not_found" {
+		t.Fatalf("the notifier reads the wallet (none here): %d %s", status, code)
+	}
 	for _, rt := range []struct{ method, path, body string }{
 		{http.MethodGet, "/v1/tenants/" + tn.ID, ""},
 		{http.MethodDelete, "/v1/tenants/" + tn.ID, ""},
 		{http.MethodPost, "/v1/tenants", `{"name":"mallory"}`},
 		{http.MethodPost, "/v1/tenants/" + tn.ID + "/wallet", ""},
-		{http.MethodGet, "/v1/tenants/" + tn.ID + "/wallet", ""},
 		{http.MethodGet, "/v1/tenants/" + tn.ID + "/wallet/approvals?user=0x0000000000000000000000000000000000000001&mode=testnet", ""},
 	} {
 		if status, code := call(rt.method, rt.path, rt.body, notifierBearer); status != http.StatusForbidden || code != "forbidden" {

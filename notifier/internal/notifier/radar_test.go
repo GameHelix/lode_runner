@@ -20,7 +20,8 @@ import (
 type fakeRadar struct {
 	mu         sync.Mutex
 	alerts     []engine.RadarAlert
-	generation int // bumped when the engine "restarts": streams end, numbering starts over
+	generation int          // bumped when the engine "restarts": streams end, numbering starts over
+	tenants    http.Handler // answers the rest of the engine's routes, when set
 }
 
 func (f *fakeRadar) add(text string) { f.addAt(text, time.Now()) }
@@ -74,11 +75,26 @@ func (f *fakeRadar) server(t *testing.T) *httptest.Server {
 				time.Sleep(10 * time.Millisecond)
 			}
 		default:
+			if f.tenants != nil {
+				f.tenants.ServeHTTP(w, r)
+				return
+			}
 			http.NotFound(w, r)
 		}
 	}))
 	t.Cleanup(s.Close)
 	return s
+}
+
+// alert raises an alert with a suggestion, as the engine does.
+func (f *fakeRadar) alert(coin, text, side string, stop float64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	a := engine.RadarAlert{Seq: int64(len(f.alerts) + 1), At: time.Now(), Coin: coin, Text: text}
+	if side != "" {
+		a.Suggestion = &engine.Suggestion{Side: side, StopLossPct: stop}
+	}
+	f.alerts = append(f.alerts, a)
 }
 
 func TestRadarAlertsReachTheChannelOnceAcrossRestarts(t *testing.T) {

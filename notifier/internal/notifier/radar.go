@@ -11,11 +11,12 @@ import (
 // up while the notifier was away longer is skipped, not posted late.
 const staleAfter = 10 * time.Minute
 
-// radar passes the engine's radar alerts to the radar channel, in order and
-// once each. It goes on from the last alert the channel got, across
-// restarts on either side, reconnects when the stream drops, and starts
-// over from the engine's latest alert when the engine's numbering is behind
-// it.
+// radar passes the engine's radar alerts to the radar channel and to every
+// connected chat, with trade buttons there, in order and once each. It goes
+// on from the last alert it passed, across restarts on either side,
+// reconnects when the stream drops, and starts over from the engine's
+// latest alert when the engine's numbering is behind it. The cursor is
+// kept under the channel's chat, or 0 without a channel.
 func (s *Service) radar(ctx context.Context) {
 	seq, err := s.radarStart(ctx)
 	for err != nil && sleep(ctx, s.Retry) {
@@ -25,7 +26,7 @@ func (s *Service) radar(ctx context.Context) {
 	for ctx.Err() == nil {
 		err := s.Engine.RadarStream(ctx, seq, func(a engine.RadarAlert) error {
 			if time.Since(a.At) <= staleAfter {
-				if err := s.send(ctx, s.RadarChannel, a.Text); err != nil {
+				if err := s.pass(ctx, a); err != nil {
 					return err
 				}
 			}
@@ -44,6 +45,27 @@ func (s *Service) radar(ctx context.Context) {
 			seq = latest
 		}
 	}
+}
+
+// pass sends one alert to the channel and to every connected chat.
+func (s *Service) pass(ctx context.Context, a engine.RadarAlert) error {
+	if s.RadarChannel != 0 {
+		if err := s.send(ctx, s.RadarChannel, a.Text); err != nil {
+			return err
+		}
+	}
+	links, err := s.Store.Links(ctx)
+	if err != nil {
+		s.Logf("database: %v", err)
+		return nil
+	}
+	buttons := tradeButtons(a)
+	for _, l := range links {
+		if err := s.send(ctx, l.Chat, a.Text, buttons...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // radarStart is where the channel goes on from: its cursor, or the

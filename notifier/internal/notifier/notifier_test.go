@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -67,6 +68,17 @@ type fakeTelegram struct {
 	updates []telegram.Update
 	sent    map[int64][]string
 	slow    int // sends to answer with "too many requests" first
+	msgs    []sentMessage
+	edits   map[int64]string // the newest text of each edited message
+	answers []string
+}
+
+// sentMessage is a message the bot sent, with its buttons' data.
+type sentMessage struct {
+	id      int64
+	chat    int64
+	text    string
+	buttons []string
 }
 
 func (f *fakeTelegram) server(t *testing.T) *httptest.Server {
@@ -102,7 +114,25 @@ func (f *fakeTelegram) server(t *testing.T) *httptest.Server {
 			}
 			chat := int64(body["chat_id"].(float64))
 			f.sent[chat] = append(f.sent[chat], body["text"].(string))
-			io.WriteString(w, `{"ok":true,"result":{}}`)
+			m := sentMessage{id: int64(len(f.msgs) + 1), chat: chat, text: body["text"].(string)}
+			if rm, ok := body["reply_markup"].(map[string]any); ok {
+				for _, row := range rm["inline_keyboard"].([]any) {
+					for _, b := range row.([]any) {
+						m.buttons = append(m.buttons, b.(map[string]any)["callback_data"].(string))
+					}
+				}
+			}
+			f.msgs = append(f.msgs, m)
+			fmt.Fprintf(w, `{"ok":true,"result":{"message_id":%d}}`, m.id)
+		case "editMessageText":
+			if f.edits == nil {
+				f.edits = map[int64]string{}
+			}
+			f.edits[int64(body["message_id"].(float64))] = body["text"].(string)
+			io.WriteString(w, `{"ok":true,"result":true}`)
+		case "answerCallbackQuery":
+			f.answers = append(f.answers, body["text"].(string))
+			io.WriteString(w, `{"ok":true,"result":true}`)
 		default:
 			io.WriteString(w, `{"ok":true,"result":true}`)
 		}
@@ -126,6 +156,40 @@ func (f *fakeTelegram) group(chat, from int64, text string) {
 		From: &telegram.User{ID: from}, Chat: telegram.Chat{ID: chat, Type: "group"}, Date: time.Now().Unix(), Text: text}})
 }
 
+// tap queues a tap on a button of a message the bot sent at the given time.
+func (f *fakeTelegram) tap(m sentMessage, data string, sent time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	msg := &telegram.Message{MessageID: m.id, Chat: telegram.Chat{ID: m.chat, Type: "private"}, Date: sent.Unix(), Text: m.text}
+	f.updates = append(f.updates, telegram.Update{UpdateID: int64(len(f.updates) + 1), Callback: &telegram.Callback{
+		ID: fmt.Sprint("cb", len(f.updates)), From: &telegram.User{ID: m.chat}, Message: msg, Data: data}})
+}
+
+// buttoned returns the messages to the chat that have buttons.
+func (f *fakeTelegram) buttoned(chat int64) []sentMessage {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	var out []sentMessage
+	for _, m := range f.msgs {
+		if m.chat == chat && len(m.buttons) > 0 {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+func (f *fakeTelegram) edited(id int64) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.edits[id]
+}
+
+func (f *fakeTelegram) answered() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.answers)
+}
+
 func (f *fakeTelegram) texts(chat int64) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -133,11 +197,14 @@ func (f *fakeTelegram) texts(chat int64) []string {
 }
 
 type rig struct {
-	t     *testing.T
-	store *store.Store
-	tg    *fakeTelegram
-	tgURL string
-	stop  func()
+	t      *testing.T
+	store  *store.Store
+	tg     *fakeTelegram
+	radar  *fakeRadar
+	eng    *fakeTenants
+	tgURL  string
+	engURL string
+	stop   func()
 }
 
 func newRig(t *testing.T) *rig {
@@ -146,8 +213,9 @@ func newRig(t *testing.T) *rig {
 		t.Fatal(err)
 	}
 	t.Cleanup(st.Close)
-	r := &rig{t: t, store: st, tg: &fakeTelegram{sent: map[int64][]string{}}}
-	r.tgURL = r.tg.server(t).URL
+	r := &rig{t: t, store: st, tg: &fakeTelegram{sent: map[int64][]string{}}, eng: &fakeTenants{}}
+	r.radar = &fakeRadar{tenants: r.eng.handler()}
+	r.tgURL, r.engURL = r.tg.server(t).URL, r.radar.server(t).URL
 	r.start()
 	t.Cleanup(func() { r.stop() })
 	return r
@@ -157,7 +225,7 @@ func newRig(t *testing.T) *rig {
 func (r *rig) start() {
 	svc := &Service{Store: r.store, Logf: r.t.Logf, Retry: 50 * time.Millisecond, Gap: time.Millisecond, Rate: 1000,
 		Bot:    &telegram.Bot{HTTP: http.DefaultClient, BaseURL: r.tgURL, Token: "bot-token"},
-		Engine: &engine.Client{BaseURL: "http://127.0.0.1:1", Token: "engine-token", HTTP: http.DefaultClient}}
+		Engine: &engine.Client{BaseURL: r.engURL, Token: "engine-token", HTTP: http.DefaultClient}}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { svc.Run(ctx); close(done) }()

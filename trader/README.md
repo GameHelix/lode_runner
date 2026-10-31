@@ -26,7 +26,7 @@ Only a clean, pushed tree deploys; the image is tagged with the commit, and `/v1
 
 ## Engine API
 
-The app's and the notifier's only way in, on `127.0.0.1:8080` with `Authorization: Bearer $ENGINE_API_TOKEN`. The notifier uses `ENGINE_NOTIFIER_TOKEN` instead, which opens only the radar and a tenant's trades, so a leak there cannot close accounts or touch wallets. It manages tenants and each tenant's wallet (made by the engine, approved by the account's own wallet in the browser) and trades, and serves the radar's alerts as a list or a live stream. The contract is [api/openapi.yaml](api/openapi.yaml); package `api` is its Go client.
+The app's and the notifier's only way in, on `127.0.0.1:8080` with `Authorization: Bearer $ENGINE_API_TOKEN`. The notifier uses `ENGINE_NOTIFIER_TOKEN` instead, which opens only the radar, a tenant's wallet and its trades, so a leak there cannot close accounts or approve wallets. It manages tenants and each tenant's wallet (made by the engine, approved by the account's own wallet in the browser) and trades, and serves the radar's alerts as a list or a live stream. The contract is [api/openapi.yaml](api/openapi.yaml); package `api` is its Go client.
 
 ```sh
 curl -H "Authorization: Bearer $ENGINE_API_TOKEN" '127.0.0.1:8080/v1/radar/alerts?limit=5'

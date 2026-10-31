@@ -128,7 +128,7 @@ func TestATradeOpensWithItsStopsAndClosesCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tr.Coin != "ETH" || tr.Side != "long" || tr.Size != 0.025 || tr.EntryPx != 2001 || tr.Leverage != 3 || tr.StopPx != 1800 || tr.TakeProfitPx != 2400 || tr.StopOID == 0 || tr.TakeProfitOID == 0 {
+	if tr.Mode != "testnet" || tr.Coin != "ETH" || tr.Side != "long" || tr.Size != 0.025 || tr.EntryPx != 2001 || tr.Leverage != 3 || tr.StopPx != 1800 || tr.TakeProfitPx != 2400 || tr.StopOID == 0 || tr.TakeProfitOID == 0 {
 		t.Fatalf("trade %+v", tr)
 	}
 	if len(fake.actions) != 2 || fake.actions[0]["type"] != "updateLeverage" || fake.actions[0]["leverage"] != float64(3) {
@@ -170,7 +170,7 @@ func TestATradeOpensWithItsStopsAndClosesCleanly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Size != 0.025 || c.AvgPx != 2001 || c.Remaining != 0 || c.StopsCancelled != 2 || len(fake.resting) != 0 {
+	if c.Mode != "testnet" || c.Size != 0.025 || c.AvgPx != 2001 || c.Remaining != 0 || c.StopsCancelled != 2 || len(fake.resting) != 0 {
 		t.Fatalf("closed %+v, resting %v", c, fake.resting)
 	}
 	close := fake.actions[0]["orders"].([]any)[0].(map[string]any)
