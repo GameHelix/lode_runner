@@ -187,4 +187,22 @@ func (s *Store) SetOffset(ctx context.Context, bot string, next int64) error {
 	return err
 }
 
+// RadarCursor is the number of the last radar alert the chat got, and
+// whether it has got any.
+func (s *Store) RadarCursor(ctx context.Context, chat int64) (int64, bool, error) {
+	var seq int64
+	err := s.pool.QueryRow(ctx, "select seq from radar_cursors where chat_id = $1", chat).Scan(&seq)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	return seq, err == nil, err
+}
+
+// SetRadarCursor records the last radar alert the chat got.
+func (s *Store) SetRadarCursor(ctx context.Context, chat, seq int64) error {
+	_, err := s.pool.Exec(ctx, `insert into radar_cursors (chat_id, seq) values ($1, $2)
+		on conflict (chat_id) do update set seq = excluded.seq, updated_at = now()`, chat, seq)
+	return err
+}
+
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }

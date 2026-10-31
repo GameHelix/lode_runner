@@ -9,4 +9,4 @@ Costs are round trips: 0.3% on spot (0.1% fee and 0.05% slippage per side), 0.15
 
 ## Live check
 
-`python3 -I hypotheses/channel_posts.py candylario` pulls the channel's posts into posts.json; `python3 -I hypotheses/live_check.py posts.json` reads every alert back and checks it against Hyperliquid's candles: results/live_check.md.
+`python3 -I hypotheses/engine_alerts.py deploy@91.99.222.102` pulls every alert the engine has kept into alerts.json (`channel_posts.py candylario` reads the channel's posts instead, into posts.json); `python3 -I hypotheses/live_check.py alerts.json` reads every alert back and checks it against Hyperliquid's candles: results/live_check.md.

@@ -186,6 +186,37 @@ func (w *Watcher) Warm(ctx context.Context, h History) error {
 // seed turns candles into samples: the close as the price and the day's
 // volume as the last 96 candles' notional, which is what the exchange
 // reports live. The candle still forming is left out.
+// Recall takes alerts raised before, so the cooldowns they started still
+// hold after a restart: a coin alerted shortly before stays quiet for the
+// rest of its cooldown, and a funding flip still comes once a day. Call it
+// after Warm, which starts every coin afresh.
+func (w *Watcher) Recall(alerts []Alert) {
+	if w.coins == nil {
+		w.coins = map[string]*track{}
+	}
+	later := func(t *time.Time, at time.Time) {
+		if at.After(*t) {
+			*t = at
+		}
+	}
+	for _, a := range alerts {
+		tr := w.coins[a.Coin]
+		if tr == nil {
+			tr = &track{}
+			w.coins[a.Coin] = tr
+		}
+		switch a.Rule {
+		case RuleFundingFlip:
+			later(&tr.fundingAlertAt, a.At)
+		case RuleMomentum:
+			later(&tr.momentumAt, a.At)
+			later(&tr.lastAlert, a.At)
+		default:
+			later(&tr.lastAlert, a.At)
+		}
+	}
+}
+
 func (w *Watcher) seed(coin string, now time.Time, candles []hyperliquid.Candle) {
 	if w.coins == nil {
 		w.coins = map[string]*track{}

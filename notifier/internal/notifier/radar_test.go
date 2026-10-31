@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/candylario/candylario/notifier/internal/engine"
+	"github.com/candylario/candylario/notifier/internal/store"
 	"github.com/candylario/candylario/notifier/internal/telegram"
 )
 
@@ -22,10 +23,12 @@ type fakeRadar struct {
 	generation int // bumped when the engine "restarts": streams end, numbering starts over
 }
 
-func (f *fakeRadar) add(text string) {
+func (f *fakeRadar) add(text string) { f.addAt(text, time.Now()) }
+
+func (f *fakeRadar) addAt(text string, at time.Time) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.alerts = append(f.alerts, engine.RadarAlert{Seq: int64(len(f.alerts) + 1), At: time.Now(), Coin: "X", Text: text})
+	f.alerts = append(f.alerts, engine.RadarAlert{Seq: int64(len(f.alerts) + 1), At: at, Coin: "X", Text: text})
 }
 
 func (f *fakeRadar) restart() {
@@ -78,55 +81,76 @@ func (f *fakeRadar) server(t *testing.T) *httptest.Server {
 	return s
 }
 
-func TestRadarAlertsReachTheChannelOnceAndRestartsRepeatNothing(t *testing.T) {
+func TestRadarAlertsReachTheChannelOnceAcrossRestarts(t *testing.T) {
+	st, err := store.Open(context.Background(), testDatabase(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(st.Close)
 	tg := &fakeTelegram{sent: map[int64][]string{}}
 	radar := &fakeRadar{}
 	radar.add("🚀 OLD +5.0% in 15m")
 	radar.add("🔻 OLDER -4.0% in 15m")
 	const channel = -1001234
-	s := &Service{
-		Bot:    &telegram.Bot{BaseURL: tg.server(t).URL, Token: "t", HTTP: http.DefaultClient},
-		Engine: &engine.Client{BaseURL: radar.server(t).URL, Token: "n", HTTP: http.DefaultClient},
-		Logf:   t.Logf, RadarChannel: channel, Retry: 20 * time.Millisecond, Gap: time.Millisecond, Rate: 1000,
+	tgURL, radarURL := tg.server(t).URL, radar.server(t).URL
+	start := func() func() {
+		s := &Service{
+			Bot:    &telegram.Bot{BaseURL: tgURL, Token: "t", HTTP: http.DefaultClient},
+			Engine: &engine.Client{BaseURL: radarURL, Token: "n", HTTP: http.DefaultClient},
+			Store:  st, Logf: t.Logf, RadarChannel: channel, Retry: 20 * time.Millisecond, Gap: time.Millisecond, Rate: 1000,
+		}
+		s.defaults()
+		ctx, cancel := context.WithCancel(context.Background())
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() { defer wg.Done(); s.deliver(ctx) }()
+		go func() { defer wg.Done(); s.radar(ctx) }()
+		return func() { cancel(); wg.Wait() }
 	}
-	s.defaults()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go s.deliver(ctx)
-	go s.radar(ctx)
-
-	wait := func(what string, ok func() bool) {
+	wait := func(what string, n int) {
 		t.Helper()
-		for start := time.Now(); !ok(); {
-			if time.Since(start) > 3*time.Second {
+		for begin := time.Now(); len(tg.texts(channel)) != n; {
+			if time.Since(begin) > 3*time.Second {
 				t.Fatalf("waiting for %s; channel got %q", what, tg.texts(channel))
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+	stop := start()
 	time.Sleep(100 * time.Millisecond)
 	if got := tg.texts(channel); len(got) != 0 {
-		t.Fatalf("alerts from before the start were posted: %q", got)
+		t.Fatalf("alerts from before the first start were posted: %q", got)
 	}
-	radar.add("🚀 HYPE +5.2% in 15m, +7.0% in 1h, +12.9% today · 6× the usual volume · $81.40")
-	wait("the new alert", func() bool { return len(tg.texts(channel)) == 1 })
-	if got := tg.texts(channel)[0]; got != "🚀 HYPE +5.2% in 15m, +7.0% in 1h, +12.9% today · 6× the usual volume · $81.40" {
+	radar.add("🚀 HYPE +5.2% in 15m · $81.40")
+	wait("the new alert", 1)
+
+	// The notifier restarts. A fresh alert raised meanwhile goes out; a
+	// stale one is skipped; nothing repeats.
+	stop()
+	radar.addAt("🔻 STALE -6.0% in 15m", time.Now().Add(-time.Hour))
+	radar.add("🚀 WHILE-DOWN +7.0% in 15m")
+	stop = start()
+	wait("the alert raised while the notifier was down", 2)
+	if got := tg.texts(channel); got[1] != "🚀 WHILE-DOWN +7.0% in 15m" {
 		t.Fatalf("posted %q", got)
 	}
+	if cur, ok, err := st.RadarCursor(context.Background(), channel); err != nil || !ok || cur != 5 {
+		t.Fatalf("cursor %d %v %v", cur, ok, err)
+	}
 
-	// The engine restarts: its stream drops and its numbering starts over.
-	// The alert it raised before the notifier reconnected is not repeated
-	// as news; the next one arrives.
+	// The engine starts its numbering over: its stream drops, and the next
+	// alert still arrives.
 	radar.restart()
 	radar.add("🚀 WHILE-AWAY +9.0% in 15m")
 	time.Sleep(150 * time.Millisecond)
-	radar.add("🔻 SOL -4.1% in 15m, -2.0% in 1h, +1.0% today · open interest -12.0% in 1h · $180.20")
-	wait("the alert after the restart", func() bool { return len(tg.texts(channel)) == 2 })
-	if got := tg.texts(channel); got[1] != "🔻 SOL -4.1% in 15m, -2.0% in 1h, +1.0% today · open interest -12.0% in 1h · $180.20" {
+	radar.add("🔻 SOL -4.1% in 15m · $180.20")
+	wait("the alert after the engine started over", 3)
+	if got := tg.texts(channel); got[2] != "🔻 SOL -4.1% in 15m · $180.20" {
 		t.Fatalf("posted %q", got)
 	}
-	time.Sleep(100 * time.Millisecond)
-	if got := tg.texts(channel); len(got) != 2 {
+	stop()
+	time.Sleep(50 * time.Millisecond)
+	if got := tg.texts(channel); len(got) != 3 {
 		t.Fatalf("repeated something: %q", got)
 	}
 }

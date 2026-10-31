@@ -2,8 +2,10 @@ package pg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -147,5 +149,33 @@ func TestTheAgentsKeysGoWithIt(t *testing.T) {
 	owner.QueryRow(ctx, "select count(*) from events").Scan(&events)
 	if attached != 0 || status != "stopped" || events != 1 {
 		t.Fatalf("attached %d, agent %s, events %d", attached, status, events)
+	}
+}
+
+func TestRadarAlertsAreKeptInOrder(t *testing.T) {
+	url := testDB(t)
+	ctx := context.Background()
+	s, err := Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	at := time.Date(2026, 10, 31, 8, 0, 0, 0, time.UTC)
+	for seq := int64(1); seq <= 5; seq++ {
+		a := RadarAlert{Seq: seq, At: at.Add(time.Duration(seq) * time.Minute), Coin: "ETH", Rule: "big move", Alert: json.RawMessage(`{"coin":"ETH","price":2400.5}`)}
+		if err := s.AddRadarAlert(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.AddRadarAlert(ctx, RadarAlert{Seq: 3, At: at, Coin: "X", Rule: "big move", Alert: json.RawMessage(`{}`)}); !errors.Is(err, ErrExists) {
+		t.Fatalf("a number is used once: %v", err)
+	}
+	after, err := s.RadarAlertsAfter(ctx, 2, 2)
+	if err != nil || len(after) != 2 || after[0].Seq != 3 || after[1].Seq != 4 || !after[0].At.Equal(at.Add(3*time.Minute)) || string(after[0].Alert) != `{"coin": "ETH", "price": 2400.5}` {
+		t.Fatalf("after: %+v %v", after, err)
+	}
+	last, err := s.LastRadarAlerts(ctx, 2)
+	if err != nil || len(last) != 2 || last[0].Seq != 4 || last[1].Seq != 5 {
+		t.Fatalf("last: %+v %v", last, err)
 	}
 }

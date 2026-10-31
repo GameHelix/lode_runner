@@ -76,7 +76,11 @@ func serve(ctx context.Context, svc *fleet.Service, e env, out io.Writer) error 
 	logf := func(format string, args ...any) {
 		fmt.Fprintf(out, "%s %s\n", time.Now().UTC().Format("2006-01-02 15:04:05Z"), fmt.Sprintf(format, args...))
 	}
-	done, err := startAPI(ctx, svc, startRadar(ctx, e, logf), logf)
+	rl, err := startRadar(ctx, e, svc.Store, logf)
+	if err != nil {
+		return err
+	}
+	done, err := startAPI(ctx, svc, rl, logf)
 	if err != nil {
 		return err
 	}

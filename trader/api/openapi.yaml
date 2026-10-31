@@ -174,7 +174,7 @@ paths:
   /v1/radar/alerts:
     get:
       summary: The radar's latest alerts
-      description: Unusual moves on every Hyperliquid perpetual, oldest first. Without `after`, the last `limit` alerts; with it, those numbered above that seq. The engine keeps the last thousand in memory.
+      description: Unusual moves on every Hyperliquid perpetual, oldest first. Without `after`, the last `limit` alerts; with it, those numbered above that seq. The engine keeps every alert, so the numbering goes on across restarts.
       parameters:
         - $ref: "#/components/parameters/after"
         - name: limit
