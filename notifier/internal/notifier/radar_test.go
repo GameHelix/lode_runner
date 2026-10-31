@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/candylario/candylario/notifier/internal/engine"
-	"github.com/candylario/candylario/notifier/internal/store"
-	"github.com/candylario/candylario/notifier/internal/telegram"
+	"github.com/jobloom/candylario/notifier/internal/engine"
+	"github.com/jobloom/candylario/notifier/internal/store"
+	"github.com/jobloom/candylario/notifier/internal/telegram"
 )
 
 // fakeRadar is the engine's radar API: the latest alerts and their stream.

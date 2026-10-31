@@ -10,10 +10,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/api"
 
-	"github.com/candylario/candylario/app/internal/notifier"
-	"github.com/candylario/candylario/app/internal/store"
+	"github.com/jobloom/candylario/app/internal/notifier"
+	"github.com/jobloom/candylario/app/internal/store"
 )
 
 type templateScenario struct {

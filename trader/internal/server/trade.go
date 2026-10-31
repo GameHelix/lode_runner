@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"github.com/candylario/candylario/trader/api"
-	"github.com/candylario/candylario/trader/internal/fleet"
+	"github.com/jobloom/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/internal/fleet"
 )
 
 // openTrade opens a position with its stops in one batch.

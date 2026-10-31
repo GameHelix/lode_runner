@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"slices"
 
-	"github.com/candylario/candylario/app/internal/store"
+	"github.com/jobloom/candylario/app/internal/store"
 )
 
 // The platform admin's page: every account with its address. Admins are

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/candylario/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/api"
 )
 
 // The wallet page connects an account's own Hyperliquid wallet without a

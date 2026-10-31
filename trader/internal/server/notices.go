@@ -10,8 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/api"
-	"github.com/candylario/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/internal/pg"
 )
 
 func limitsOut(l pg.Limits) api.Limits {

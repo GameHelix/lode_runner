@@ -14,9 +14,9 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/candylario/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/api"
 
-	"github.com/candylario/candylario/app/internal/store"
+	"github.com/jobloom/candylario/app/internal/store"
 )
 
 type ctxKey struct{}

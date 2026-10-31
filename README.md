@@ -13,5 +13,3 @@ One Go module holds the three services; each builds its own image and runs as it
 Deploys run in GitHub Actions, never from a laptop. A push to main runs the tests and then ships the services it changed, engine first, with `deploy.sh`. The **deploy** workflow redeploys or rolls back one service by hand, and the **infra** workflow plans or applies OpenTofu. `./infra/actions-key.sh` gives Actions its SSH key to the server, once.
 
 `make check` runs the tests locally; the Postgres ones need `TEST_DATABASE_URL`.
-
-Until October 31, 2026 these were five repositories, candylario/trader, notifier, app, infra and research; their history stays there.

@@ -12,8 +12,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
-	"github.com/candylario/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/pg"
 )
 
 // fakeExchange answers the exchange calls the wallet flow makes.

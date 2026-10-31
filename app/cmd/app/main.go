@@ -14,12 +14,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/candylario/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/api"
 
-	"github.com/candylario/candylario/app/internal/mail"
-	"github.com/candylario/candylario/app/internal/notifier"
-	"github.com/candylario/candylario/app/internal/store"
-	"github.com/candylario/candylario/app/internal/web"
+	"github.com/jobloom/candylario/app/internal/mail"
+	"github.com/jobloom/candylario/app/internal/notifier"
+	"github.com/jobloom/candylario/app/internal/store"
+	"github.com/jobloom/candylario/app/internal/web"
 )
 
 const usage = `app — Candylario accounts and pages

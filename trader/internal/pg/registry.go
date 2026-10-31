@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/candylario/candylario/trader/internal/vault"
+	"github.com/jobloom/candylario/trader/internal/vault"
 )
 
 // ErrNotFound means the row does not exist for this tenant.

@@ -15,7 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/notifier/internal/store"
+	"github.com/jobloom/candylario/notifier/internal/store"
 )
 
 type Server struct {

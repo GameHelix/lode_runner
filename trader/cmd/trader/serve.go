@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/candylario/candylario/trader/internal/fleet"
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
-	"github.com/candylario/candylario/trader/internal/pg"
-	"github.com/candylario/candylario/trader/internal/radar"
-	"github.com/candylario/candylario/trader/internal/server"
-	"github.com/candylario/candylario/trader/internal/vault"
+	"github.com/jobloom/candylario/trader/internal/fleet"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/radar"
+	"github.com/jobloom/candylario/trader/internal/server"
+	"github.com/jobloom/candylario/trader/internal/vault"
 )
 
 // openFleet connects to the database and the vault.

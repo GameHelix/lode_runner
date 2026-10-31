@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/internal/pg"
-	"github.com/candylario/candylario/trader/internal/testkit"
-	"github.com/candylario/candylario/trader/internal/vault"
+	"github.com/jobloom/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/testkit"
+	"github.com/jobloom/candylario/trader/internal/vault"
 )
 
 // service returns a fleet service on a fresh, migrated database, or skips.

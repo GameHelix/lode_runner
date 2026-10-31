@@ -21,11 +21,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/candylario/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/api"
 
-	"github.com/candylario/candylario/app/internal/mail"
-	"github.com/candylario/candylario/app/internal/notifier"
-	"github.com/candylario/candylario/app/internal/store"
+	"github.com/jobloom/candylario/app/internal/mail"
+	"github.com/jobloom/candylario/app/internal/notifier"
+	"github.com/jobloom/candylario/app/internal/store"
 )
 
 // testDatabase creates an empty, migrated database on the server in

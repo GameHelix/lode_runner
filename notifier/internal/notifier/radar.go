@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/candylario/candylario/notifier/internal/engine"
+	"github.com/jobloom/candylario/notifier/internal/engine"
 )
 
 // staleAfter is how old an alert may be and still go out: one that piled

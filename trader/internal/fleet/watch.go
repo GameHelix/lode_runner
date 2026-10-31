@@ -10,7 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/pg"
 )
 
 // The engine records each connected account's fills and tells its chats

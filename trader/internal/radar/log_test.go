@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
 )
 
 // memStore is a store that keeps every alert, or refuses to.

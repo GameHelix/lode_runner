@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/candylario/candylario/trader/api"
-	"github.com/candylario/candylario/trader/internal/fleet"
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/internal/fleet"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
 )
 
 func walletOut(w fleet.Wallet, acct *hyperliquid.Account) api.Wallet {

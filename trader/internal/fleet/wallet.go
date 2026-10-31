@@ -11,8 +11,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
-	"github.com/candylario/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/pg"
 )
 
 // KindHyperliquid is an account's agent wallet on Hyperliquid. The engine

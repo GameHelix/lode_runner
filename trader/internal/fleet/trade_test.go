@@ -14,8 +14,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
-	"github.com/candylario/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/pg"
 )
 
 // fakePerps is a perpetuals exchange with one coin, ETH at 2000, that

@@ -14,8 +14,8 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/candylario/candylario/app/internal/mail"
-	"github.com/candylario/candylario/app/internal/store"
+	"github.com/jobloom/candylario/app/internal/mail"
+	"github.com/jobloom/candylario/app/internal/store"
 )
 
 // Emails: the link that confirms an account's address, the link that sets a

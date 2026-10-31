@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
 )
 
 // Source gives the state of every market. The exchange client is one.

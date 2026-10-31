@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/candylario/candylario/trader/api"
-	"github.com/candylario/candylario/trader/internal/radar"
+	"github.com/jobloom/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/internal/radar"
 )
 
 func TestTheRadarIsListedAndStreamed(t *testing.T) {

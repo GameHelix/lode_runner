@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/candylario/candylario/trader/api"
-	"github.com/candylario/candylario/trader/internal/radar"
+	"github.com/jobloom/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/internal/radar"
 )
 
 func radarOut(e radar.Entry) api.RadarAlert {

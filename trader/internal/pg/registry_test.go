@@ -10,8 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/candylario/candylario/trader/internal/testkit"
-	"github.com/candylario/candylario/trader/internal/vault"
+	"github.com/jobloom/candylario/trader/internal/testkit"
+	"github.com/jobloom/candylario/trader/internal/vault"
 )
 
 // testDB returns a fresh, migrated database, or skips the test.

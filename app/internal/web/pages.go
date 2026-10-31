@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 	"rsc.io/qr"
 
-	"github.com/candylario/candylario/app/internal/notifier"
+	"github.com/jobloom/candylario/app/internal/notifier"
 )
 
 type telegramPage struct {

@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/candylario/candylario/notifier/internal/engine"
-	"github.com/candylario/candylario/notifier/internal/store"
-	"github.com/candylario/candylario/notifier/internal/telegram"
+	"github.com/jobloom/candylario/notifier/internal/engine"
+	"github.com/jobloom/candylario/notifier/internal/store"
+	"github.com/jobloom/candylario/notifier/internal/telegram"
 )
 
 // A button trade: this size at this leverage, with the alert's suggested

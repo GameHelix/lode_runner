@@ -17,10 +17,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/trader/api"
-	"github.com/candylario/candylario/trader/internal/fleet"
-	"github.com/candylario/candylario/trader/internal/pg"
-	"github.com/candylario/candylario/trader/internal/radar"
+	"github.com/jobloom/candylario/trader/api"
+	"github.com/jobloom/candylario/trader/internal/fleet"
+	"github.com/jobloom/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/radar"
 )
 
 type Server struct {

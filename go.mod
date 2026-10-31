@@ -1,4 +1,4 @@
-module github.com/candylario/candylario
+module github.com/jobloom/candylario
 
 go 1.27
 

@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/notifier/internal/engine"
+	"github.com/jobloom/candylario/notifier/internal/engine"
 )
 
 const noticesCursor = "notices"

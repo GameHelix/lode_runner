@@ -11,9 +11,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
-	"github.com/candylario/candylario/trader/internal/pg"
-	"github.com/candylario/candylario/trader/internal/radar"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/pg"
+	"github.com/jobloom/candylario/trader/internal/radar"
 )
 
 // runRadar watches every perpetual and prints each unusual move as it

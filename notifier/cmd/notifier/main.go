@@ -18,11 +18,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/candylario/candylario/notifier/internal/api"
-	"github.com/candylario/candylario/notifier/internal/engine"
-	"github.com/candylario/candylario/notifier/internal/notifier"
-	"github.com/candylario/candylario/notifier/internal/store"
-	"github.com/candylario/candylario/notifier/internal/telegram"
+	"github.com/jobloom/candylario/notifier/internal/api"
+	"github.com/jobloom/candylario/notifier/internal/engine"
+	"github.com/jobloom/candylario/notifier/internal/notifier"
+	"github.com/jobloom/candylario/notifier/internal/store"
+	"github.com/jobloom/candylario/notifier/internal/telegram"
 )
 
 const usage = `notifier — the Candylario bot: radar alerts, trades and notices on Telegram

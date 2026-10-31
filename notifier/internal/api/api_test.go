@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/candylario/candylario/notifier/internal/store"
+	"github.com/jobloom/candylario/notifier/internal/store"
 )
 
 // testDatabase creates an empty, migrated database on the server in

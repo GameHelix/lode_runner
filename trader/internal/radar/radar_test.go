@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/candylario/candylario/trader/internal/hyperliquid"
+	"github.com/jobloom/candylario/trader/internal/hyperliquid"
 )
 
 // market holds a coin's state as the fake exchange reports it.
