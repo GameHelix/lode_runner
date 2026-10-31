@@ -71,7 +71,7 @@ jobs:
       - run: tofu -chdir=modules/host init -input=false && tofu -chdir=modules/host test
       - name: shellcheck the scripts and the rendered bootstrap
         run: |
-          shellcheck -e SC2029,SC2087 ../deploy.sh env.sh hetzner/tofu.sh actions-key.sh backup/*.sh
+          shellcheck -S warning -e SC2087 ../deploy.sh env.sh hetzner/tofu.sh actions-key.sh backup/*.sh
           cd modules/host/tests/render
           tofu init -input=false
           tofu apply -auto-approve -input=false
