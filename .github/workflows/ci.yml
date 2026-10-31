@@ -26,10 +26,20 @@ jobs:
           has() { grep -qE "$1" <<<"$files"; }
           has '^(trader|notifier|app)/|^go\.(mod|sum)$|^\.github/' && echo go=true >>"$GITHUB_OUTPUT"
           has '^infra/|^deploy\.sh$|^\.github/' && echo infra=true >>"$GITHUB_OUTPUT"
+          # A service ships when anything of it changed since the commit it
+          # runs, as /healthz reports, so a failed run or a rollback leaves
+          # nothing behind; without that answer, when the push changed it.
+          health=$(curl -fsS --max-time 10 https://candy.surf/healthz || true)
           deploy=""
-          has '^trader/|^go\.(mod|sum)$' && deploy="$deploy trader"
-          has '^notifier/|^go\.(mod|sum)$' && deploy="$deploy notifier"
-          has '^app/|^trader/api/|^go\.(mod|sum)$' && deploy="$deploy app"
+          for spec in 'trader:engine:^trader/|^go\.(mod|sum)$' 'notifier:notifier:^notifier/|^go\.(mod|sum)$' 'app:app:^app/|^trader/api/|^go\.(mod|sum)$'; do
+            IFS=: read -r svc key pattern <<<"$spec"
+            running=$(jq -r --arg k "$key" '.commits[$k] // empty' <<<"$health" 2>/dev/null || true)
+            changed=$files
+            if [ -n "$running" ] && git cat-file -e "$running^{commit}" 2>/dev/null; then
+              changed=$(git diff --name-only "$running" HEAD | grep -v '\.md$' || true)
+            fi
+            grep -qE "$pattern" <<<"$changed" && deploy="$deploy $svc"
+          done
           echo "deploy=${deploy# }" >>"$GITHUB_OUTPUT"
   go:
     needs: changes
