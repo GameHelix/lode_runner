@@ -1,38 +1,34 @@
 #!/usr/bin/env bash
-# Copies every Candylario database off this server:
-# encrypted to an age key whose secret half never comes here, into S3-style
-# object storage under the day's date, keeping 30 days. When it fails, the
-# admin gets an email through the app's Mailjet keys.
+# Copies every Candylario database, and the settings in /srv/secrets that a
+# rebuilt server needs, onto the backup disk mounted at BACKUP_DIR, under the
+# day's date, keeping 30 days. When it fails, the admin gets an email through
+# the app's Mailjet keys.
 #
 #   ./backup.sh                 back up now; candylario-backup.timer runs this nightly
 #   ./backup.sh days            list the days stored
-#   ./backup.sh cat DAY FILE    print one stored file, still encrypted
+#   ./backup.sh cat DAY FILE    print one stored file
 set -euo pipefail
 cd "$(dirname "$0")"
 set -a
 . ./.env
 set +a
-region=${BACKUP_S3_ENDPOINT#*://}
-export RCLONE_CONFIG_STORE_TYPE=s3 RCLONE_CONFIG_STORE_PROVIDER=Other RCLONE_CONFIG_STORE_ACL=private \
-  RCLONE_CONFIG_STORE_ENDPOINT="$BACKUP_S3_ENDPOINT" RCLONE_CONFIG_STORE_REGION="${region%%.*}" \
-  RCLONE_CONFIG_STORE_ACCESS_KEY_ID="$BACKUP_S3_ACCESS_KEY" RCLONE_CONFIG_STORE_SECRET_ACCESS_KEY="$BACKUP_S3_SECRET_KEY" \
-  RCLONE_CONFIG_STORE_NO_CHECK_BUCKET=true
-store="store:$BACKUP_S3_BUCKET"
 
 case ${1:-} in
 days)
-  rclone lsf --dirs-only "$store" | tr -d /
+  for d in "$BACKUP_DIR"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]; do
+    if [ -d "$d" ]; then basename "$d"; fi
+  done
   exit
   ;;
 cat)
-  rclone cat "$store/${2:?day}/${3:?file}"
+  cat "$BACKUP_DIR/${2:?day}/${3:?file}"
   exit
   ;;
 esac
 
 day=$(date -u +%F)
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
+out="$BACKUP_DIR/.$day"
+trap 'rm -rf "$out"' EXIT
 
 alert() {
   local key secret to domain
@@ -48,11 +44,15 @@ alert() {
 }
 trap alert ERR
 
+mountpoint -q "$BACKUP_DIR"
+umask 077
+rm -rf "$out"
+mkdir "$out"
 for svc in trader notifier app; do
-  (cd "/srv/$svc" && docker compose exec -T postgres pg_dump -U "$svc" -d "$svc" --clean --if-exists) |
-    gzip | age -r "$BACKUP_AGE_RECIPIENT" >"$tmp/$svc.sql.gz.age"
+  (cd "/srv/$svc" && docker compose exec -T postgres pg_dump -U "$svc" -d "$svc" --clean --if-exists) | gzip >"$out/$svc.sql.gz"
 done
-rclone copy "$tmp" "$store/$day"
-rclone delete --min-age 30d "$store"
-rclone rmdirs --leave-root "$store"
-echo "backed up $day: $(cd "$tmp" && ls | tr '\n' ' ')"
+tar -C /srv -czf "$out/secrets.tar.gz" secrets
+rm -rf "${BACKUP_DIR:?}/$day"
+mv "$out" "$BACKUP_DIR/$day"
+find "$BACKUP_DIR" -mindepth 1 -maxdepth 1 -type d -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' -mtime +30 -exec rm -rf {} +
+echo "backed up $day: $(cd "$BACKUP_DIR/$day" && ls | tr '\n' ' ')"

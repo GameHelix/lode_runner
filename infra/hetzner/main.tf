@@ -138,8 +138,34 @@ resource "hcloud_server" "host" {
   }
 }
 
+# The nightly backups land on this volume, a disk of its own that outlives
+# the server: a rebuilt server gets it attached and restores from it. It sits
+# in the server's location, so it does not survive an outage of the whole
+# location.
+resource "hcloud_volume" "backup" {
+  name              = "${var.name}-backup"
+  size              = 10
+  location          = var.location
+  format            = "ext4"
+  delete_protection = true
+  labels            = { project = "candylario" }
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "hcloud_volume_attachment" "backup" {
+  volume_id = hcloud_volume.backup.id
+  server_id = hcloud_server.host.id
+}
+
 output "ip" {
   value = hcloud_server.host.ipv4_address
+}
+
+output "backup_device" {
+  value = hcloud_volume.backup.linux_device
 }
 
 output "ssh" {

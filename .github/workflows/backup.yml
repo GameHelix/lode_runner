@@ -23,8 +23,6 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/id_ed25519
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
           chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
-      - if: inputs.action == 'check'
-        run: sudo apt-get -qq update && sudo apt-get -yqq install age >/dev/null
       - env:
           ACTION: ${{ inputs.action }}
           HOST: deploy@${{ vars.SERVER_IP }}

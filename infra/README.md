@@ -44,10 +44,10 @@ The domain points at the server's IPv4 address, so it must outlive the server. `
 
 Not rehearsed yet; rehearse it on a spare server before relying on it, and write down how long each step took.
 
-1. Make sure last night's backup exists (`./backup/restore.sh deploy@SERVER` lists the days), and copy `/srv/secrets` off the old server: it holds the settings, the age identity and the OpenTofu state.
+1. Make sure last night's backup exists (`./backup/restore.sh deploy@SERVER` lists the days). The backup volume holds it with a copy of `/srv/secrets`: the settings and the OpenTofu state.
 2. In `hetzner/main.tf`, move the address reference to the server side, which only matters at creation: in `hcloud_primary_ip.ipv4` replace `assignee_type` and `assignee_id` with `location = var.location`; in `hcloud_server.host` add `ipv4 = hcloud_primary_ip.ipv4.id` to `public_net`.
 3. `tofu apply -replace=hcloud_server.host`, with the state and token from that copy. The old server goes, the address stays, and the new server boots on it with the bootstrap; SSH host keys change, so remove the old entry from `~/.ssh/known_hosts`.
-4. Put `/srv/secrets` back on the new server, deploy the three services (`./deploy.sh SERVICE deploy@SERVER`), then `./backup/install.sh deploy@SERVER` and `./backup/restore.sh deploy@SERVER DAY trader --live` for each service.
+4. The apply attaches the backup volume to the new server. Mount it (`sudo mount BACKUP_DEVICE /mnt/backup`), put the settings back (`tar -C /srv -xzf /mnt/backup/DAY/secrets.tar.gz`), deploy the three services, then run the **backup** workflow's install and `./backup/restore.sh deploy@SERVER DAY trader --live` for each service.
 5. Check `https://candy.surf/healthz` shows every service and its commit, and that the bot answers `/help`. DNS needs no change.
 
 `tofu -chdir=modules/host test` checks the bootstrap.
@@ -58,7 +58,7 @@ Every setting lives on the server in one file, `/srv/secrets/candylario.env` (mo
 
 ## Backups
 
-Every night `backup/backup.sh` on the server copies the three databases to S3-style object storage (Hetzner Object Storage), encrypted with [age](https://age-encryption.org) to `BACKUP_AGE_RECIPIENT`. The secret half, `BACKUP_AGE_IDENTITY`, is in the server's settings file, so a lost server also loses it: keep a copy of `/srv/secrets` somewhere else. Thirty days are kept, and a failed night emails the admin.
+Every night `backup/backup.sh` on the server copies the three databases and `/srv/secrets` to the backup volume, a Hetzner volume mounted at `/mnt/backup` that outlives the server. Thirty days are kept, and a failed night emails the admin. The volume sits in the server's location, so an outage of the whole location takes both.
 
 The **backup** workflow in GitHub Actions runs these: install, which also backs up once, or check, which proves the latest night of each database in a scratch database. From a machine with SSH to the server:
 
@@ -69,4 +69,4 @@ The **backup** workflow in GitHub Actions runs these: install, which also backs 
 ./backup/restore.sh deploy@SERVER DAY trader --live   # replace the live database
 ```
 
-The `[backup]` section of the settings file holds `BACKUP_S3_ENDPOINT`, `BACKUP_S3_BUCKET`, `BACKUP_S3_ACCESS_KEY`, `BACKUP_S3_SECRET_KEY` and the age key pair.
+The `[backup]` section of the settings file holds `BACKUP_DIR` (`/mnt/backup`) and `BACKUP_DEVICE`, the volume's device (`tofu output backup_device`).
