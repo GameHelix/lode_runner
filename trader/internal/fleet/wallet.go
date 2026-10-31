@@ -150,8 +150,9 @@ func feePercent(tenths int) string {
 }
 
 // WalletApprovals prepares the approvals for user's wallet to sign on the
-// given exchange. The wallet is made first if the account has none.
-func (s *Service) WalletApprovals(ctx context.Context, tenant uuid.UUID, user, mode string) (Approvals, error) {
+// given exchange, on the chain the wallet is on (0 for the default). The
+// wallet is made first if the account has none.
+func (s *Service) WalletApprovals(ctx context.Context, tenant uuid.UUID, user, mode string, chainID int64) (Approvals, error) {
 	user, mode, err := walletArgs(user, mode)
 	if err != nil {
 		return Approvals{}, err
@@ -164,9 +165,12 @@ func (s *Service) WalletApprovals(ctx context.Context, tenant uuid.UUID, user, m
 	if err != nil {
 		return Approvals{}, err
 	}
-	a := Approvals{Agent: w.Agent, User: user, Mode: mode, ApproveAgent: ex.ApproveAgent(w.Agent, "candylario")}
+	if chainID < 0 || chainID > 1<<53 {
+		return Approvals{}, refusef("chain_id must be a chain id")
+	}
+	a := Approvals{Agent: w.Agent, User: user, Mode: mode, ApproveAgent: ex.ApproveAgent(w.Agent, "candylario", chainID)}
 	if s.Builder.Address != "" && s.Builder.Fee > 0 {
-		b := ex.ApproveBuilderFee(s.Builder.Address, feePercent(s.Builder.Fee))
+		b := ex.ApproveBuilderFee(s.Builder.Address, feePercent(s.Builder.Fee), chainID)
 		a.ApproveBuilderFee = &b
 	}
 	return a, nil

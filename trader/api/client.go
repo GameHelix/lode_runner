@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -95,4 +96,30 @@ func (c *Client) Tenant(ctx context.Context, tenant string) (Tenant, error) {
 func (c *Client) CloseTenant(ctx context.Context, tenant string) (Tenant, error) {
 	var out Tenant
 	return out, c.do(ctx, http.MethodDelete, tenantPath(tenant), nil, &out)
+}
+
+// Wallet returns the tenant's agent wallet and, once approved, its account.
+// A tenant without one gets a not_found error.
+func (c *Client) Wallet(ctx context.Context, tenant string) (Wallet, error) {
+	var out Wallet
+	return out, c.do(ctx, http.MethodGet, tenantPath(tenant, "wallet"), nil, &out)
+}
+
+// WalletApprovals gives the typed data the account's own wallet signs, on
+// the chain that wallet is on (0 for the default), making the agent wallet
+// first if the tenant has none.
+func (c *Client) WalletApprovals(ctx context.Context, tenant, user, mode string, chainID int64) (WalletApprovals, error) {
+	q := url.Values{"user": {user}, "mode": {mode}}
+	if chainID > 0 {
+		q.Set("chain_id", strconv.FormatInt(chainID, 10))
+	}
+	var out WalletApprovals
+	return out, c.do(ctx, http.MethodGet, tenantPath(tenant, "wallet", "approvals")+"?"+q.Encode(), nil, &out)
+}
+
+// ApproveWallet submits the approvals the account's wallet signed; the
+// engine confirms them with the exchange.
+func (c *Client) ApproveWallet(ctx context.Context, tenant string, a WalletApproval) (Wallet, error) {
+	var out Wallet
+	return out, c.do(ctx, http.MethodPost, tenantPath(tenant, "wallet", "approvals"), a, &out)
 }

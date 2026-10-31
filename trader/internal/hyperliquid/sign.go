@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -120,9 +121,34 @@ type field struct {
 	name, typ string
 }
 
-// signatureChainID is the chain the wallet signs account actions on. It
-// can be any chain; hyperliquidChain in the action names the environment.
+// signatureChainID is the chain account actions are signed on unless the
+// wallet is on another. It can be any chain; hyperliquidChain in the action
+// names the environment.
 const signatureChainID = "0x66eee"
+
+// chainHex writes a chain id as an action carries it; 0 is the default.
+func chainHex(chainID int64) string {
+	if chainID <= 0 {
+		return signatureChainID
+	}
+	return "0x" + strconv.FormatInt(chainID, 16)
+}
+
+// actionChain is the chain an account action is signed on, from its
+// signatureChainId.
+func actionChain(message omap) *big.Int {
+	for _, e := range message {
+		if e.k != "signatureChainId" {
+			continue
+		}
+		if s, ok := e.v.(string); ok {
+			if n, ok := new(big.Int).SetString(strings.TrimPrefix(s, "0x"), 16); ok {
+				return n
+			}
+		}
+	}
+	return big.NewInt(chainIDInt())
+}
 
 // typedData is an EIP-712 message as a wallet signs it (eth_signTypedData_v4).
 type typedData struct {
@@ -140,7 +166,7 @@ func userTypedData(primary string, fields []field, message omap) typedData {
 		types[primary] = append(types[primary], map[string]string{"name": f.name, "type": f.typ})
 	}
 	return typedData{Types: types, PrimaryType: primary, Message: message, Domain: map[string]any{
-		"name": "HyperliquidSignTransaction", "version": "1", "chainId": chainIDInt(), "verifyingContract": zeroAddress}}
+		"name": "HyperliquidSignTransaction", "version": "1", "chainId": actionChain(message).Int64(), "verifyingContract": zeroAddress}}
 }
 
 const zeroAddress = "0x0000000000000000000000000000000000000000"
@@ -179,7 +205,7 @@ func userDigest(primary string, fields []field, message omap) ([]byte, error) {
 		}
 		enc = append(enc, word...)
 	}
-	domain := domainSeparator("HyperliquidSignTransaction", "1", big.NewInt(chainIDInt()))
+	domain := domainSeparator("HyperliquidSignTransaction", "1", actionChain(message))
 	return keccak([]byte{0x19, 0x01}, domain, keccak(enc)), nil
 }
 

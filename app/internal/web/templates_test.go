@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/candylario/candylario/trader/api"
+
 	"github.com/candylario/candylario/app/internal/notifier"
 	"github.com/candylario/candylario/app/internal/store"
 )
@@ -46,6 +48,10 @@ func templateScenarios() []templateScenario {
 		{"telegram-connected", "telegram", "/telegram", &user, telegramPage{Configured: true, Chats: []notifier.Chat{{ChatID: 42, Name: "@founder", LinkedAt: now}}}, []string{"@founder", "/telegram/chats/42/disconnect"}},
 		{"telegram-error", "telegram", "/telegram", &user, telegramPage{Configured: true, Problem: "Telegram is not reachable"}, []string{"Telegram is not reachable", "Connect a chat"}},
 		{"settings", "settings", "/settings", &user, nil, []string{"/settings/password", "/settings/email", "/settings/delete"}},
+		{"wallet", "wallet", "/wallet", &user, walletPage{Mode: "testnet"}, []string{"Hyperliquid testnet", "data-connect", "/static/wallet.js"}},
+		{"wallet-made", "wallet", "/wallet", &user, walletPage{Mode: "testnet", Wallet: &api.Wallet{AgentAddress: "0xagent"}}, []string{"data-connect"}},
+		{"wallet-connected", "wallet", "/wallet", &user, walletPage{Mode: "testnet", Wallet: &api.Wallet{AgentAddress: "0xagent", User: "0xuser", AgentApproved: true, Account: &api.WalletAccount{Value: 10, Withdrawable: 5}}}, []string{"Connected", "0xuser", "$10.00", "No open positions.", "can never withdraw"}},
+		{"wallet-problem", "wallet", "/wallet", &user, walletPage{Mode: "testnet", Problem: "The engine is not reachable"}, []string{"The engine is not reachable"}},
 		{"admin", "admin", "/admin", &admin, []adminRow{{User: user}, {User: unverified}, {User: admin, Admin: true}}, []string{"id=\"accounts-table\"", "unconfirmed", "Platform admin", "/admin/password"}},
 		{"admin-empty", "admin", "/admin", &admin, []adminRow(nil), []string{"No accounts yet."}},
 	}

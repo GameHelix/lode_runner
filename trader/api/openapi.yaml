@@ -117,6 +117,10 @@ paths:
           in: query
           required: true
           schema: {type: string, enum: [testnet, mainnet]}
+        - name: chain_id
+          in: query
+          description: The chain the wallet is on, which it signs for; Arbitrum Sepolia (421614) when absent.
+          schema: {type: integer, minimum: 1}
       responses:
         "200":
           description: The approvals to sign

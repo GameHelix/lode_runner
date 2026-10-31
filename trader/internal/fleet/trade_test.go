@@ -108,7 +108,7 @@ func TestATradeOpensWithItsStopsAndClosesCleanly(t *testing.T) {
 		t.Fatalf("trade without a wallet: %v", err)
 	}
 	// The account approves its wallet, as the browser flow does.
-	a, err := s.WalletApprovals(ctx, tenant, fake.user, "testnet")
+	a, err := s.WalletApprovals(ctx, tenant, fake.user, "testnet", 0)
 	if err != nil {
 		t.Fatal(err)
 	}

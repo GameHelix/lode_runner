@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/candylario/candylario/trader/api"
 	"github.com/candylario/candylario/trader/internal/fleet"
@@ -59,7 +60,13 @@ func (s *Server) walletApprovals(w http.ResponseWriter, r *http.Request) (int, a
 	if _, err := s.Fleet.Store.Tenant(r.Context(), ids[0]); err != nil {
 		return 0, nil, err
 	}
-	a, err := s.Fleet.WalletApprovals(r.Context(), ids[0], r.URL.Query().Get("user"), r.URL.Query().Get("mode"))
+	var chainID int64
+	if v := r.URL.Query().Get("chain_id"); v != "" {
+		if chainID, err = strconv.ParseInt(v, 10, 64); err != nil {
+			return 0, nil, badRequest("chain_id must be a number")
+		}
+	}
+	a, err := s.Fleet.WalletApprovals(r.Context(), ids[0], r.URL.Query().Get("user"), r.URL.Query().Get("mode"), chainID)
 	if err != nil {
 		return 0, nil, err
 	}

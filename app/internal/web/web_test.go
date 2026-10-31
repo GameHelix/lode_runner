@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -68,13 +69,17 @@ func testDatabase(t *testing.T) string {
 // fakeEngine is the engine API with in-memory tenants, as openapi.yaml
 // describes it.
 type fakeEngine struct {
-	mu      sync.Mutex
-	token   string
-	tenants map[string]api.Tenant
+	mu        sync.Mutex
+	token     string
+	tenants   map[string]api.Tenant
+	wallets   map[string]api.Wallet
+	approvals []url.Values
+	approved  []api.WalletApproval
+	refuse    string // when set, approvals are refused with this message
 }
 
 func newFakeEngine() *fakeEngine {
-	return &fakeEngine{token: "engine-token", tenants: map[string]api.Tenant{}}
+	return &fakeEngine{token: "engine-token", tenants: map[string]api.Tenant{}, wallets: map[string]api.Wallet{}}
 }
 
 func (f *fakeEngine) server(t *testing.T) *httptest.Server {
@@ -126,6 +131,39 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		t.Status, t.Name = "closed", ""
 		f.tenants[t.ID] = t
 		reply(w, 200, t)
+	})
+	mux.HandleFunc("GET /v1/tenants/{t}/wallet", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		wl, ok := f.wallets[r.PathValue("t")]
+		if !ok {
+			notFound(w)
+			return
+		}
+		reply(w, 200, wl)
+	})
+	mux.HandleFunc("GET /v1/tenants/{t}/wallet/approvals", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.approvals = append(f.approvals, r.URL.Query())
+		f.wallets[r.PathValue("t")] = api.Wallet{ID: "w1", AgentAddress: "0x00000000000000000000000000000000000000aa"}
+		reply(w, 200, map[string]any{"user": r.URL.Query().Get("user"), "mode": r.URL.Query().Get("mode"), "agent_address": "0x00000000000000000000000000000000000000aa",
+			"approve_agent": map[string]any{"action": map[string]any{"type": "approveAgent", "nonce": 1700000000000}, "nonce": 1700000000000, "typed_data": map[string]any{"primaryType": "HyperliquidTransaction:ApproveAgent"}}})
+	})
+	mux.HandleFunc("POST /v1/tenants/{t}/wallet/approvals", func(w http.ResponseWriter, r *http.Request) {
+		var in api.WalletApproval
+		json.NewDecoder(r.Body).Decode(&in)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.refuse != "" {
+			reply(w, 422, map[string]any{"error": map[string]string{"code": "refused", "message": f.refuse}})
+			return
+		}
+		f.approved = append(f.approved, in)
+		wl := api.Wallet{ID: "w1", AgentAddress: "0x00000000000000000000000000000000000000aa", User: in.User, Mode: in.Mode, AgentApproved: true,
+			Account: &api.WalletAccount{Value: 1500.5, Withdrawable: 1200, Positions: []api.PerpPosition{{Coin: "ETH", Size: -0.0125, EntryPx: 2001, UnrealizedPnl: 0.14, LiquidationPx: 3900, Leverage: 1}}}}
+		f.wallets[r.PathValue("t")] = wl
+		reply(w, 200, wl)
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+f.token {
@@ -835,5 +873,76 @@ func TestLegalPagesAreLinkedFromEveryPublicPage(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("sign-up page lacks %s", want)
 		}
+	}
+}
+
+// postJSON posts a JSON body as the wallet page's script does.
+func (r *rig) postJSON(path, csrf string, body any) (*http.Response, map[string]any) {
+	r.t.Helper()
+	raw, _ := json.Marshal(body)
+	req, _ := http.NewRequest(http.MethodPost, r.app.URL+path, bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	if csrf != "" {
+		req.Header.Set("X-CSRF-Token", csrf)
+	}
+	resp, err := r.client.Do(req)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	return resp, out
+}
+
+func TestAWalletIsConnectedFromTheBrowser(t *testing.T) {
+	r := newRig(t)
+	csrf := r.signup("wan@example.com")
+	tenant := r.tenantOf("wan@example.com")
+	resp, body := r.get("/wallet")
+	if resp.StatusCode != 200 || !strings.Contains(body, "data-connect") || !strings.Contains(body, "/static/wallet.js") || !strings.Contains(body, `href="/wallet" aria-current="page"`) {
+		t.Fatalf("wallet page: %d", resp.StatusCode)
+	}
+	user := "0x5e9ee1089755c3435139848e47e6635505d5a13a"
+	if resp, _ := r.postJSON("/wallet/approvals", "", map[string]any{"user": user, "chain_id": 42161}); resp.StatusCode != 403 {
+		t.Fatalf("without the session's token: %d", resp.StatusCode)
+	}
+	resp, out := r.postJSON("/wallet/approvals", csrf, map[string]any{"user": user, "chain_id": 42161})
+	if resp.StatusCode != 200 || out["approve_agent"] == nil {
+		t.Fatalf("approvals: %d %v", resp.StatusCode, out)
+	}
+	r.engine.mu.Lock()
+	q := r.engine.approvals[0]
+	r.engine.mu.Unlock()
+	if q.Get("user") != user || q.Get("mode") != "testnet" || q.Get("chain_id") != "42161" {
+		t.Fatalf("the engine was asked %v", q)
+	}
+	agent := out["approve_agent"].(map[string]any)
+	signed := map[string]any{"user": user, "mode": "mainnet", "approve_agent": map[string]any{"action": agent["action"], "nonce": agent["nonce"],
+		"signature": map[string]any{"r": "0x" + strings.Repeat("1", 64), "s": "0x" + strings.Repeat("2", 64), "v": 28}}}
+	r.engine.mu.Lock()
+	r.engine.refuse = "the exchange refused the agent approval: User or API Wallet does not exist"
+	r.engine.mu.Unlock()
+	if resp, out := r.postJSON("/wallet/approve", csrf, signed); resp.StatusCode != 422 || !strings.Contains(out["error"].(string), "does not exist") {
+		t.Fatalf("a refusal is shown: %d %v", resp.StatusCode, out)
+	}
+	r.engine.mu.Lock()
+	r.engine.refuse = ""
+	r.engine.mu.Unlock()
+	if resp, out := r.postJSON("/wallet/approve", csrf, signed); resp.StatusCode != 200 || out["agent_approved"] != true {
+		t.Fatalf("approve: %d %v", resp.StatusCode, out)
+	}
+	r.engine.mu.Lock()
+	got := r.engine.approved[0]
+	r.engine.mu.Unlock()
+	if got.User != user || got.Mode != "testnet" || got.ApproveAgent.Nonce != 1700000000000 || got.ApproveAgent.Signature.V != 28 || !strings.Contains(string(got.ApproveAgent.Action), "approveAgent") {
+		t.Fatalf("the engine got %+v", got)
+	}
+	_, body = r.get("/wallet")
+	if !strings.Contains(body, "Connected") || !strings.Contains(body, "$1500.50") || !strings.Contains(body, "ETH") || strings.Contains(body, "data-connect") || !strings.Contains(body, "Wallet connected.") {
+		t.Fatalf("the connected wallet: %s", body)
+	}
+	if tenant == "" {
+		t.Fatal("no tenant")
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -99,6 +100,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /admin/password", s.requireAccess(s.adminChangePassword, platformAdmin))
 	for pattern, h := range map[string]http.HandlerFunc{
 		"GET /telegram":                          s.telegram,
+		"GET /wallet":                            s.wallet,
+		"POST /wallet/approvals":                 s.walletApprovals,
+		"POST /wallet/approve":                   s.walletApprove,
 		"POST /telegram/links":                   s.telegramLink,
 		"POST /telegram/chats/{chat}/disconnect": s.telegramDisconnect,
 		"GET /settings":                          s.settings,
@@ -307,6 +311,7 @@ func isCode(err error, code string) bool {
 func parseTemplates() map[string]*template.Template {
 	funcs := template.FuncMap{
 		"when": func(t time.Time) string { return t.UTC().Format("Jan 2, 15:04") + " UTC" },
+		"usd":  func(f float64) string { return strconv.FormatFloat(f, 'f', 2, 64) },
 	}
 	base := template.Must(template.New("").Funcs(funcs).ParseFS(files, "templates/layout.html", "templates/partials/*.html"))
 	pages, err := fs.Glob(files, "templates/pages/*.html")

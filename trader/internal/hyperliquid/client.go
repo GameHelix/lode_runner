@@ -682,20 +682,23 @@ var (
 )
 
 // ApproveAgent prepares the approval that lets wallet agent trade for the
-// signing account. An account keeps one unnamed agent and up to three
+// signing account, signed on the given chain: the one the account's wallet
+// is on, since a browser wallet signs only for its own chain, and 0 for
+// Arbitrum Sepolia. An account keeps one unnamed agent and up to three
 // named ones; a name may end in "valid_until MILLIS" to expire.
-func (c *Client) ApproveAgent(agent, name string) UserAction {
+func (c *Client) ApproveAgent(agent, name string, chainID int64) UserAction {
 	nonce := c.nextNonce()
-	msg := omap{{"type", "approveAgent"}, {"hyperliquidChain", c.chain()}, {"signatureChainId", signatureChainID},
+	msg := omap{{"type", "approveAgent"}, {"hyperliquidChain", c.chain()}, {"signatureChainId", chainHex(chainID)},
 		{"agentAddress", strings.ToLower(agent)}, {"agentName", name}, {"nonce", nonce}}
 	return c.userAction("HyperliquidTransaction:ApproveAgent", approveAgentFields, msg, nonce)
 }
 
 // ApproveBuilderFee prepares the approval of a builder's maximum fee on the
-// signing account's orders, as a percent string such as "0.01%".
-func (c *Client) ApproveBuilderFee(builder, maxFeeRate string) UserAction {
+// signing account's orders, as a percent string such as "0.01%", signed on
+// the given chain as ApproveAgent is.
+func (c *Client) ApproveBuilderFee(builder, maxFeeRate string, chainID int64) UserAction {
 	nonce := c.nextNonce()
-	msg := omap{{"type", "approveBuilderFee"}, {"hyperliquidChain", c.chain()}, {"signatureChainId", signatureChainID},
+	msg := omap{{"type", "approveBuilderFee"}, {"hyperliquidChain", c.chain()}, {"signatureChainId", chainHex(chainID)},
 		{"maxFeeRate", maxFeeRate}, {"builder", strings.ToLower(builder)}, {"nonce", nonce}}
 	return c.userAction("HyperliquidTransaction:ApproveBuilderFee", approveBuilderFeeFields, msg, nonce)
 }

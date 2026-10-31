@@ -41,6 +41,7 @@
     <p class="nav-label">WORKSPACE</p>
     <nav class="app-nav" aria-label="Workspace">
       <a href="/telegram"{{if eq .Section "telegram"}} aria-current="page"{{end}}>{{template "icon-telegram"}}<span>Telegram</span></a>
+      <a href="/wallet"{{if eq .Section "wallet"}} aria-current="page"{{end}}>{{template "icon-key"}}<span>Wallet</span></a>
       <a href="/settings"{{if eq .Section "settings"}} aria-current="page"{{end}}>{{template "icon-settings"}}<span>Settings</span></a>
     </nav>
     <div class="sidebar-note"><span class="icon-tile">{{template "icon-leaf"}}</span><strong>Every alert, free.</strong><p>The radar posts each one to the channel as it happens.</p><a href="https://t.me/candylario">Open the channel {{template "icon-arrow"}}</a></div>

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -107,7 +108,7 @@ func TestAccountActionsArePreparedForTheWallet(t *testing.T) {
 	defer srv.Close()
 	c := &Client{BaseURL: srv.URL, Now: func() time.Time { return time.UnixMilli(1700000000000) }}
 
-	a := c.ApproveBuilderFee("0xAbCdEf0123456789AbCdEf0123456789AbCdEf01", "0.01%")
+	a := c.ApproveBuilderFee("0xAbCdEf0123456789AbCdEf0123456789AbCdEf01", "0.01%", 0)
 	raw, _ := json.Marshal(a)
 	var view struct {
 		Action    json.RawMessage `json:"action"`
@@ -134,7 +135,7 @@ func TestAccountActionsArePreparedForTheWallet(t *testing.T) {
 	if string(f.actions[0]) != string(view.Action) || f.sigs[0] != sig || f.nonces[0] != a.Nonce {
 		t.Fatalf("submitted %s %+v %d", f.actions[0], f.sigs[0], f.nonces[0])
 	}
-	if b := c.ApproveAgent(s.Address(), "candylario"); b.Nonce <= a.Nonce {
+	if b := c.ApproveAgent(s.Address(), "candylario", 0); b.Nonce <= a.Nonce {
 		t.Fatalf("nonce did not advance: %d after %d", b.Nonce, a.Nonce)
 	}
 }
@@ -190,5 +191,24 @@ func TestTestnetReads(t *testing.T) {
 	}
 	if _, found, err := c.OrderStatus(ctx, "0x0000000000000000000000000000000000000001", 1, ""); err != nil || found {
 		t.Fatalf("order status: %v %v", found, err)
+	}
+}
+
+func TestAnApprovalIsSignedOnTheWalletsChain(t *testing.T) {
+	c := &Client{BaseURL: TestnetURL, Now: func() time.Time { return time.UnixMilli(1700000000000) }}
+	s, _ := NewSigner("0x0123456789012345678901234567890123456789012345678901234567890123")
+	def := c.ApproveAgent("0x00000000000000000000000000000000000000aa", "candylario", 0)
+	arb := c.ApproveAgent("0x00000000000000000000000000000000000000aa", "candylario", 42161)
+	if def.TypedData.Domain["chainId"] != int64(0x66eee) || arb.TypedData.Domain["chainId"] != int64(42161) {
+		t.Fatalf("domains %v %v", def.TypedData.Domain, arb.TypedData.Domain)
+	}
+	raw, _ := json.Marshal(arb.Action)
+	if !strings.Contains(string(raw), `"signatureChainId":"0xa4b1"`) || !strings.Contains(string(raw), `"hyperliquidChain":"Testnet"`) {
+		t.Fatalf("action %s", raw)
+	}
+	a, _ := def.Sign(s)
+	b, _ := arb.Sign(s)
+	if a == b {
+		t.Fatal("the chain is not in the signature")
 	}
 }

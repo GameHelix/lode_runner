@@ -68,7 +68,7 @@ func TestAWalletIsMadeOnceAndApprovedWithTheExchange(t *testing.T) {
 		t.Fatalf("second wallet %+v new=%v: %v", again, isNew, err)
 	}
 
-	a, err := s.WalletApprovals(ctx, tenant, fake.user, "Testnet")
+	a, err := s.WalletApprovals(ctx, tenant, fake.user, "Testnet", 0)
 	if err != nil || a.Agent != w.Agent || a.ApproveBuilderFee == nil {
 		t.Fatalf("approvals %+v: %v", a, err)
 	}
