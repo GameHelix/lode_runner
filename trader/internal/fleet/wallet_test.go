@@ -21,6 +21,7 @@ type fakeExchange struct {
 	mu        sync.Mutex
 	user      string // the account every agent is reported to act for
 	fee       int    // the builder fee the account has approved
+	missing   bool   // every address is unknown to the exchange
 	submitted []string
 }
 
@@ -36,6 +37,10 @@ func (f *fakeExchange) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch strings.Trim(string(body["type"]), `"`) {
 	case "userRole":
+		if f.missing {
+			w.Write([]byte(`{"role":"missing"}`))
+			return
+		}
 		json.NewEncoder(w).Encode(map[string]any{"role": "agent", "data": map[string]string{"user": f.user}})
 	case "maxBuilderFee":
 		json.NewEncoder(w).Encode(f.fee)
@@ -68,6 +73,14 @@ func TestAWalletIsMadeOnceAndApprovedWithTheExchange(t *testing.T) {
 		t.Fatalf("second wallet %+v new=%v: %v", again, isNew, err)
 	}
 
+	// A wallet that never deposited learns it before signing anything.
+	fake.missing = true
+	var refused *Refused
+	if _, err := s.WalletApprovals(ctx, tenant, fake.user, "Testnet", 0); !errors.As(err, &refused) || !strings.Contains(err.Error(), "/drip") {
+		t.Fatalf("approvals for a wallet the exchange does not know: %v", err)
+	}
+	fake.missing = false
+
 	a, err := s.WalletApprovals(ctx, tenant, fake.user, "Testnet", 0)
 	if err != nil || a.Agent != w.Agent || a.ApproveBuilderFee == nil {
 		t.Fatalf("approvals %+v: %v", a, err)
@@ -90,7 +103,6 @@ func TestAWalletIsMadeOnceAndApprovedWithTheExchange(t *testing.T) {
 
 	// An action for another agent is refused before anything is sent.
 	forged := Signed{Action: json.RawMessage(strings.Replace(string(raw), w.Agent, "0x"+strings.Repeat("1", 40), 1)), Nonce: agent.Nonce, Signature: sigA}
-	var refused *Refused
 	if _, err := s.ApproveWallet(ctx, tenant, fake.user, "testnet", forged, builder); !errors.As(err, &refused) || len(fake.submitted) != 0 {
 		t.Fatalf("forged approval: %v, submitted %v", err, fake.submitted)
 	}

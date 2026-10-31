@@ -168,6 +168,18 @@ func (s *Service) WalletApprovals(ctx context.Context, tenant uuid.UUID, user, m
 	if chainID < 0 || chainID > 1<<53 {
 		return Approvals{}, refusef("chain_id must be a chain id")
 	}
+	// The exchange refuses any action from an address that never
+	// deposited, so say so before the wallet signs.
+	role, err := ex.Role(ctx, user)
+	if err != nil {
+		return Approvals{}, err
+	}
+	if role.Role == "missing" {
+		if mode == ModeMainnet {
+			return Approvals{}, refusef("%s has no Hyperliquid account yet: deposit USDC on https://app.hyperliquid.xyz, then connect again", user)
+		}
+		return Approvals{}, refusef("%s has no Hyperliquid testnet account yet: claim test USDC on https://app.hyperliquid-testnet.xyz/drip, then connect again. The faucet pays only wallets that have deposited USDC on https://app.hyperliquid.xyz once", user)
+	}
 	a := Approvals{Agent: w.Agent, User: user, Mode: mode, ApproveAgent: ex.ApproveAgent(w.Agent, "candylario", chainID)}
 	if s.Builder.Address != "" && s.Builder.Fee > 0 {
 		b := ex.ApproveBuilderFee(s.Builder.Address, feePercent(s.Builder.Fee), chainID)
