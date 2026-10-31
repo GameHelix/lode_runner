@@ -1,0 +1,15 @@
+.env
+.env.*
+!.env.example
+.cache/
+bin/
+.DS_Store
+coverage.out
+infra/**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.plan
+crash.log
+research/.venv/
+research/results/*.log

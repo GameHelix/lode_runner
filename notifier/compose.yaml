@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: notifier
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: notifier
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notifier -d notifier"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  notifier:
+    build:
+      context: ..
+      dockerfile: notifier/Dockerfile
+    image: ${IMAGE:-notifier:local}
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgres://notifier:${POSTGRES_PASSWORD}@postgres:5432/notifier?sslmode=disable
+      ENGINE_API_URL: ${ENGINE_API_URL:-http://trader:8080}
+    # The engine is reachable as trader:8080 on the shared network.
+    ports:
+      - "127.0.0.1:8081:8080"
+    networks: [default, candylario]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+networks:
+  candylario:
+    external: true
+
+volumes:
+  pgdata:
