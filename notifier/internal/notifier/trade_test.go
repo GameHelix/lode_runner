@@ -1,6 +1,7 @@
 package notifier
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -185,6 +186,10 @@ func TestNoticesReachTheirAccountsChatsOnce(t *testing.T) {
 	r.link(43, bob)
 	r.eng.notice(alice, "🛑 Stop hit: close long 0.025 ETH at $1800 · P&L -$5.02 🧪 testnet")
 	r.waitFor("alice's notice", func() bool { return r.said(42, "🛑 Stop hit") })
+	r.waitFor("the notifier to be done with it", func() bool {
+		cur, _, _ := r.store.StreamCursor(context.Background(), noticesCursor)
+		return cur == 1
+	})
 	r.stop()
 	r.eng.notice(bob, "🎯 Take-profit hit: close short 0.01 SOL at $150 · P&L +$3.00")
 	r.start()

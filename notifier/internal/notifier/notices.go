@@ -65,7 +65,9 @@ func (s *Service) noticesStart(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if !ok || cur > latest {
-		return latest, nil
+		// Kept at once, so a restart before the first notice goes on from
+		// here instead of from whatever is latest by then.
+		return latest, s.Store.SetStreamCursor(ctx, noticesCursor, latest)
 	}
 	return cur, nil
 }

@@ -84,7 +84,9 @@ func (s *Service) radarStart(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if !ok || cur > latest {
-		return latest, nil
+		// Kept at once, so a restart before the first alert goes on from
+		// here instead of from whatever is latest by then.
+		return latest, s.Store.SetRadarCursor(ctx, s.RadarChannel, latest)
 	}
 	return cur, nil
 }
