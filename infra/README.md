@@ -48,6 +48,15 @@ The **rebuild** workflow in GitHub Actions runs `hetzner/rebuild.sh`: plan shows
 3. It puts `/srv/secrets` back from the volume, deploys the three services, installs the nightly backup and restores the databases.
 4. It checks `/healthz` and prints the new SSH host key.
 
+Rehearsed on 2026-10-31 (server 172581702 replaced by 173752005 on 91.99.222.102): 16.5 minutes end to end, 15 of them down. The steps took:
+- snapshot: 40 s
+- stop and back up: 8 s
+- replace: 55 s
+- first boot: 11 minutes, mostly packages and Docker
+- settings: 4 s
+- three deploys: 3 minutes
+- restores: 26 s
+
 Afterwards, set the `DEPLOY_KNOWN_HOSTS` secret to that key, run `ssh-keygen -R SERVER_IP` wherever else you SSH from, and delete the snapshot once the new server works.
 
 If the old server is dead, the run cannot back it up: attach the volume to a server, take `/srv/secrets` from its newest day, and follow the same steps by hand.
