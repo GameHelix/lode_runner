@@ -22,7 +22,7 @@ scp -q "$host:$remote/terraform.tfstate" "$host:$remote/terraform.tfvars" .
 trap 'rm -f terraform.tfvars' EXIT
 HCLOUD_TOKEN=$(ssh "$host" "sed -n 's/^HCLOUD_TOKEN=//p' /srv/secrets/candylario.env")
 export HCLOUD_TOKEN
-tofu init -input=false >/dev/null
+tofu init -input=false -lockfile=readonly >/dev/null
 if [ "${2:-}" = --plan ]; then
   tofu plan -input=false -no-color -replace=hcloud_server.host
   rm -f terraform.tfstate
