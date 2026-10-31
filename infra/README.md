@@ -32,7 +32,7 @@ At Hetzner, the state, the variables (`ssh_public_keys`, `admin_cidrs`) and the 
 ./hetzner/tofu.sh deploy@91.99.222.102 apply
 ```
 
-The server is a cax11 (Arm, 2 vCPU, 4 GB) in Falkenstein; `-var location=hel1` and `-var server_type=...` change that. The very first apply, before the server exists, runs `tofu` in `hetzner/` directly with `HCLOUD_TOKEN` exported and the variables given with `-var`.
+The server is a cx23 (x86, 2 vCPU, 4 GB) in Falkenstein, the same size as the Arm cax11 it ran on until 2026-10-31 and $0.50 a month cheaper; `-var location=hel1` and `-var server_type=...` change that. The very first apply, before the server exists, runs `tofu` in `hetzner/` directly with `HCLOUD_TOKEN` exported and the variables given with `-var`.
 
 Then run `./actions-key.sh deploy@SERVER_IP` once, which gives GitHub Actions its SSH key to the server, and push: Actions deploys the services (`deploy.sh trader|notifier|app deploy@SERVER_IP` underneath).
 

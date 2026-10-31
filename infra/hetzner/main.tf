@@ -35,7 +35,7 @@ variable "location" {
 variable "server_type" {
   description = "The server type."
   type        = string
-  default     = "cax11"
+  default     = "cx23"
 }
 
 variable "ssh_public_keys" {
