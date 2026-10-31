@@ -48,7 +48,7 @@ settle "$(jq -r .action.id <<<"$snapshot")"
 echo "snapshot $(jq -r .image.id <<<"$snapshot"); delete it once the new server works"
 
 step "stop the services and back them up to the volume"
-restart() { ssh "$host" 'for s in trader notifier app; do (cd "/srv/$s" && docker compose start "$s" </dev/null); done'; }
+restart() { ssh "$host" 'sudo mount /mnt/backup 2>/dev/null; for s in trader notifier app; do (cd "/srv/$s" && docker compose start "$s" </dev/null); done'; }
 trap restart ERR
 ssh "$host" 'for s in app notifier trader; do (cd "/srv/$s" && docker compose stop "$s" </dev/null); done; sudo systemctl start candylario-backup.service'
 day=$(ssh "$host" /srv/backup/backup.sh days | tail -1)
@@ -57,9 +57,18 @@ ssh "$host" 'sudo umount /mnt/backup'
 
 step "replace the server; the address and the backup volume move to the new one"
 trap - ERR
-# Hetzner sometimes fails a volume attach; a second apply finishes the rest.
-tofu apply -input=false -auto-approve -no-color -replace=hcloud_server.host ||
+server_id() { tofu state show -no-color hcloud_server.host 2>/dev/null | awk '$1 == "id" { gsub(/"/, "", $3); print $3 }'; }
+before=$(server_id)
+if ! tofu apply -input=false -auto-approve -no-color -replace=hcloud_server.host; then
+  # While the old server still runs, nothing was replaced: start its
+  # services again and stop. Once it is gone, a second plain apply finishes
+  # what is left, such as a volume attach Hetzner failed.
+  if [ "$(server_id)" = "$before" ]; then
+    restart
+    exit 1
+  fi
   tofu apply -input=false -auto-approve -no-color
+fi
 device=$(tofu output -raw backup_device)
 
 step "wait for the new server's first boot"
@@ -68,7 +77,18 @@ for _ in $(seq 60); do
   ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=5 -o BatchMode=yes "$host" true 2>/dev/null && break
   sleep 5
 done
-ssh "$host" 'cloud-init status --wait >/dev/null || true; cloud-init status' | grep -q 'status: done'
+# Short sessions, since the bootstrap turns the firewall on mid-way.
+for _ in $(seq 60); do
+  case $(ssh -o ConnectTimeout=5 -o BatchMode=yes "$host" 'cloud-init status' 2>/dev/null) in
+  *done*) break ;;
+  *error*)
+    echo "the new server's bootstrap failed: see /var/log/cloud-init-output.log there" >&2
+    exit 1
+    ;;
+  esac
+  sleep 10
+done
+ssh "$host" 'cloud-init status' | grep -q 'status: done'
 
 step "put /srv/secrets back from the volume"
 ssh "$host" "sudo install -d /mnt/backup && sudo mount $device /mnt/backup && sudo tar -C /srv -xzf /mnt/backup/$day/secrets.tar.gz && sudo chown -R $user:$user /srv/secrets"
