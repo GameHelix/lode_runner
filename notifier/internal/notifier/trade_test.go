@@ -2,8 +2,10 @@ package notifier
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -15,10 +17,18 @@ import (
 // fakeTenants is the engine's wallet and trade routes for every tenant:
 // trades fill at 2001 with the stop the request asked for.
 type fakeTenants struct {
-	mu     sync.Mutex
-	trades []map[string]any
-	closes []string
-	refuse string // when set, trades are refused with this message
+	mu      sync.Mutex
+	trades  []map[string]any
+	closes  []string
+	refuse  string // when set, trades are refused with this message
+	notices []map[string]any
+}
+
+// notice records a notice about an account's trading, as the engine does.
+func (f *fakeTenants) notice(tenant uuid.UUID, text string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.notices = append(f.notices, map[string]any{"seq": len(f.notices) + 1, "tenant_id": tenant.String(), "at": time.Now(), "text": text})
 }
 
 func (f *fakeTenants) handler() http.Handler {
@@ -55,6 +65,34 @@ func (f *fakeTenants) handler() http.Handler {
 			return
 		}
 		reply(w, 200, map[string]any{"mode": "testnet", "coin": "ETH", "size": 0.0125, "avg_px": 1990, "remaining": 0, "stops_cancelled": 1})
+	})
+	mux.HandleFunc("GET /v1/notices", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		last := []map[string]any{}
+		if n := len(f.notices); n > 0 {
+			last = f.notices[n-1:]
+		}
+		reply(w, 200, map[string]any{"notices": last})
+	})
+	mux.HandleFunc("GET /v1/notices/stream", func(w http.ResponseWriter, r *http.Request) {
+		after, _ := strconv.Atoi(r.URL.Query().Get("after"))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		rc := http.NewResponseController(w)
+		for r.Context().Err() == nil {
+			f.mu.Lock()
+			for _, n := range f.notices {
+				if seq := n["seq"].(int); seq > after {
+					raw, _ := json.Marshal(n)
+					fmt.Fprintf(w, "id: %d\nevent: notice\ndata: %s\n\n", seq, raw)
+					after = seq
+				}
+			}
+			f.mu.Unlock()
+			rc.Flush()
+			time.Sleep(10 * time.Millisecond)
+		}
 	})
 	mux.HandleFunc("GET /v1/tenants/{t}/wallet", func(w http.ResponseWriter, r *http.Request) {
 		reply(w, 200, map[string]any{"agent_approved": true, "mode": "testnet", "account": map[string]any{"value": 1500.5, "withdrawable": 1200,
@@ -137,5 +175,22 @@ func TestAlertsTradeFromAConnectedChat(t *testing.T) {
 	r.eng.mu.Unlock()
 	if !slices.Equal(closes, []string{"ETH", "SOL"}) {
 		t.Fatalf("closes %v", closes)
+	}
+}
+
+func TestNoticesReachTheirAccountsChatsOnce(t *testing.T) {
+	r := newRig(t)
+	alice, bob := uuid.New(), uuid.New()
+	r.link(42, alice)
+	r.link(43, bob)
+	r.eng.notice(alice, "🛑 Stop hit: close long 0.025 ETH at $1800 · P&L -$5.02 🧪 testnet")
+	r.waitFor("alice's notice", func() bool { return r.said(42, "🛑 Stop hit") })
+	r.stop()
+	r.eng.notice(bob, "🎯 Take-profit hit: close short 0.01 SOL at $150 · P&L +$3.00")
+	r.start()
+	r.waitFor("bob's notice, raised while the notifier was down", func() bool { return r.said(43, "🎯 Take-profit hit") })
+	time.Sleep(100 * time.Millisecond)
+	if r.count(42, "Stop hit") != 1 || r.said(42, "Take-profit") || r.said(43, "Stop hit") {
+		t.Fatalf("alice %q, bob %q", r.tg.texts(42), r.tg.texts(43))
 	}
 }

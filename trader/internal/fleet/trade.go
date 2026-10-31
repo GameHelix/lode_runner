@@ -141,7 +141,11 @@ func cloid() string {
 // asked, in one batch. It refuses what the limits do not allow and what
 // the exchange will not fill at once.
 func (s *Service) OpenTrade(ctx context.Context, tenant uuid.UUID, r TradeRequest) (Trade, error) {
-	maxUSD, maxLev := s.tradeLimits()
+	limits, _, err := s.Limits(ctx, tenant)
+	if err != nil {
+		return Trade{}, err
+	}
+	maxUSD, maxLev := limits.MaxUSD, limits.MaxLeverage
 	r.Coin = strings.ToUpper(strings.TrimSpace(r.Coin))
 	r.Side = strings.ToLower(strings.TrimSpace(r.Side))
 	if r.Coin == "" {
@@ -167,6 +171,11 @@ func (s *Service) OpenTrade(ctx context.Context, tenant uuid.UUID, r TradeReques
 	}
 	if math.IsNaN(r.SlippagePct) || r.SlippagePct < 0.001 || r.SlippagePct > 0.05 {
 		return Trade{}, refusef("slippage must be between 0.1%% and 5%%")
+	}
+	if pnl, err := s.TodayPnl(ctx, tenant); err != nil {
+		return Trade{}, err
+	} else if -pnl >= limits.DailyLossUSD {
+		return Trade{}, refusef("today's losses of $%.2f reached the daily cap of $%.0f; trading opens again at 00:00 UTC", -pnl, limits.DailyLossUSD)
 	}
 	w, ex, err := s.tradeClient(ctx, tenant)
 	if err != nil {
@@ -220,9 +229,11 @@ func (s *Service) OpenTrade(ctx context.Context, tenant uuid.UUID, r TradeReques
 		cancelResting(ctx, ex, asset.Index, placed[1:])
 		return Trade{}, refusef("%s did not fill within %.1f%% of the price; try again", r.Coin, r.SlippagePct*100)
 	}
+	s.record(ctx, tenant, r.Coin, pg.Order{OID: main.OID, Kind: pg.OrderOpen}, pg.Order{OID: placed[1].OID, Kind: pg.OrderStop})
 	t := Trade{Mode: w.Mode, Coin: r.Coin, Side: r.Side, Size: main.Filled, EntryPx: main.AvgPx, USD: main.Filled * main.AvgPx, Leverage: r.Leverage, OID: main.OID, StopPx: stopPx, StopOID: placed[1].OID}
 	if len(placed) > 2 {
 		t.TakeProfitPx, t.TakeProfitOID = tpPx, placed[2].OID
+		s.record(ctx, tenant, r.Coin, pg.Order{OID: placed[2].OID, Kind: pg.OrderTakeProfit})
 	}
 	return t, nil
 }
@@ -283,6 +294,7 @@ func (s *Service) CloseTrade(ctx context.Context, tenant uuid.UUID, coin string,
 	if placed[0].Error != "" {
 		return Closed{}, refusef("the exchange refused the close: %s", placed[0].Error)
 	}
+	s.record(ctx, tenant, coin, pg.Order{OID: placed[0].OID, Kind: pg.OrderClose})
 	c := Closed{Mode: w.Mode, Coin: coin, Size: placed[0].Filled, AvgPx: placed[0].AvgPx, Remaining: size - placed[0].Filled}
 	if c.Remaining > 0 {
 		return c, nil // the stops still guard what is left

@@ -205,4 +205,21 @@ func (s *Store) SetRadarCursor(ctx context.Context, chat, seq int64) error {
 	return err
 }
 
+// StreamCursor is how far the named stream has been passed on, and
+// whether it has been at all.
+func (s *Store) StreamCursor(ctx context.Context, name string) (int64, bool, error) {
+	var seq int64
+	err := s.pool.QueryRow(ctx, "select seq from stream_cursors where name = $1", name).Scan(&seq)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	return seq, err == nil, err
+}
+
+func (s *Store) SetStreamCursor(ctx context.Context, name string, seq int64) error {
+	_, err := s.pool.Exec(ctx, `insert into stream_cursors (name, seq) values ($1, $2)
+		on conflict (name) do update set seq = excluded.seq, updated_at = now()`, name, seq)
+	return err
+}
+
 func (s *Store) Ping(ctx context.Context) error { return s.pool.Ping(ctx) }

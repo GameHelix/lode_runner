@@ -128,6 +128,40 @@ func (c *Client) RadarSeq(ctx context.Context) (int64, error) {
 	return out.Alerts[0].Seq, nil
 }
 
+// Notice is something an account's chats are told about its trading.
+type Notice struct {
+	Seq      int64     `json:"seq"`
+	TenantID string    `json:"tenant_id"`
+	At       time.Time `json:"at"`
+	Text     string    `json:"text"`
+}
+
+// NoticeStream passes every account's notices numbered above after, as
+// the engine records them, until the stream drops.
+func (c *Client) NoticeStream(ctx context.Context, after int64, fn func(Notice) error) error {
+	return c.stream(ctx, "/v1/notices/stream?after="+strconv.FormatInt(after, 10), func(data []byte) error {
+		var n Notice
+		if err := json.Unmarshal(data, &n); err != nil {
+			return fmt.Errorf("notice stream: %w", err)
+		}
+		return fn(n)
+	})
+}
+
+// NoticeSeq is the number of the newest notice, 0 when there is none.
+func (c *Client) NoticeSeq(ctx context.Context) (int64, error) {
+	var out struct {
+		Notices []Notice `json:"notices"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/v1/notices", nil, &out); err != nil {
+		return 0, err
+	}
+	if len(out.Notices) == 0 {
+		return 0, nil
+	}
+	return out.Notices[0].Seq, nil
+}
+
 func tenantPath(tenant, rest string) string {
 	return "/v1/tenants/" + url.PathEscape(tenant) + rest
 }

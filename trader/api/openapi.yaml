@@ -185,6 +185,70 @@ paths:
         "400": {$ref: "#/components/responses/Error"}
         "404": {$ref: "#/components/responses/Error"}
         "409": {$ref: "#/components/responses/Error"}
+  /v1/tenants/{tenant}/limits:
+    parameters:
+      - $ref: "#/components/parameters/tenant"
+    get:
+      summary: The account's limits, the engine's caps and today's P&L
+      responses:
+        "200":
+          description: The limits
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AccountLimits"}
+        "404": {$ref: "#/components/responses/Error"}
+    put:
+      summary: Set the account's own limits, within the engine's caps
+      description: Trades above the most per trade or the leverage are refused, and so is every trade for the rest of the day (UTC) once the day's losses reach the daily cap.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/Limits"}
+      responses:
+        "200":
+          description: The limits now
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/AccountLimits"}
+        "400": {$ref: "#/components/responses/Error"}
+        "404": {$ref: "#/components/responses/Error"}
+        "422": {$ref: "#/components/responses/Error"}
+  /v1/notices:
+    get:
+      summary: What accounts' chats are told about their trading
+      description: Every account's notices, oldest first, for the notifier. Without `after`, the latest one; with it, those numbered above that seq.
+      parameters:
+        - $ref: "#/components/parameters/after"
+        - name: limit
+          in: query
+          schema: {type: integer, minimum: 1, maximum: 500, default: 100}
+      responses:
+        "200":
+          description: The notices
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/NoticeList"}
+        "400": {$ref: "#/components/responses/Error"}
+  /v1/notices/stream:
+    get:
+      summary: The notices as the engine records them
+      description: |
+        Server-sent events. Each message has `id` (the seq), `event`
+        (`notice`) and `data` (the Notice as JSON). A comment line arrives
+        every 15 seconds when nothing else does. To resume, reconnect with
+        Last-Event-ID or `after`.
+      parameters:
+        - $ref: "#/components/parameters/after"
+        - name: Last-Event-ID
+          in: header
+          schema: {type: integer, minimum: 0}
+      responses:
+        "200":
+          description: The stream
+          content:
+            text/event-stream: {}
+        "400": {$ref: "#/components/responses/Error"}
   /v1/radar/alerts:
     get:
       summary: The radar's latest alerts
@@ -227,7 +291,7 @@ components:
     token:
       type: http
       scheme: bearer
-      description: ENGINE_API_TOKEN opens every route. ENGINE_NOTIFIER_TOKEN, the notifier's, opens only the radar, a tenant's wallet and its trades; elsewhere it gets 403 forbidden.
+      description: ENGINE_API_TOKEN opens every route. ENGINE_NOTIFIER_TOKEN, the notifier's, opens only the radar, the notices, a tenant's wallet and its trades; elsewhere it gets 403 forbidden.
   parameters:
     tenant:
       name: tenant
@@ -438,6 +502,35 @@ components:
         message:
           type: string
           description: Safe to show to the user for refused.
+    Limits:
+      type: object
+      required: [max_usd, max_leverage, daily_loss_usd]
+      properties:
+        max_usd: {type: number, description: The most one trade may be, in USDC.}
+        max_leverage: {type: integer, minimum: 1}
+        daily_loss_usd: {type: number, description: The day's losses (UTC) at which trading stops until the next day.}
+    AccountLimits:
+      type: object
+      required: [limits, caps, today_pnl]
+      properties:
+        limits: {$ref: "#/components/schemas/Limits"}
+        caps: {$ref: "#/components/schemas/Limits"}
+        today_pnl: {type: number, description: What the account made or lost today (UTC) on closed positions, net of fees.}
+    Notice:
+      type: object
+      required: [seq, tenant_id, at, text]
+      properties:
+        seq: {type: integer}
+        tenant_id: {type: string, format: uuid}
+        at: {type: string, format: date-time}
+        text: {type: string, description: The notice as a chat shows it.}
+    NoticeList:
+      type: object
+      required: [notices]
+      properties:
+        notices:
+          type: array
+          items: {$ref: "#/components/schemas/Notice"}
     Health:
       type: object
       required: [ok]

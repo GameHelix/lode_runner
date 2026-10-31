@@ -76,10 +76,11 @@ type fakeEngine struct {
 	approvals []url.Values
 	approved  []api.WalletApproval
 	refuse    string // when set, approvals are refused with this message
+	limits    map[string]api.Limits
 }
 
 func newFakeEngine() *fakeEngine {
-	return &fakeEngine{token: "engine-token", tenants: map[string]api.Tenant{}, wallets: map[string]api.Wallet{}}
+	return &fakeEngine{token: "engine-token", tenants: map[string]api.Tenant{}, wallets: map[string]api.Wallet{}, limits: map[string]api.Limits{}}
 }
 
 func (f *fakeEngine) server(t *testing.T) *httptest.Server {
@@ -131,6 +132,31 @@ func (f *fakeEngine) server(t *testing.T) *httptest.Server {
 		t.Status, t.Name = "closed", ""
 		f.tenants[t.ID] = t
 		reply(w, 200, t)
+	})
+	caps := api.Limits{MaxUSD: 100, MaxLeverage: 5, DailyLossUSD: 50}
+	limitsOf := func(t string) api.AccountLimits {
+		l, ok := f.limits[t]
+		if !ok {
+			l = caps
+		}
+		return api.AccountLimits{Limits: l, Caps: caps, TodayPnl: -1.25}
+	}
+	mux.HandleFunc("GET /v1/tenants/{t}/limits", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		reply(w, 200, limitsOf(r.PathValue("t")))
+	})
+	mux.HandleFunc("PUT /v1/tenants/{t}/limits", func(w http.ResponseWriter, r *http.Request) {
+		var in api.Limits
+		json.NewDecoder(r.Body).Decode(&in)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if in.MaxUSD > caps.MaxUSD {
+			reply(w, 422, map[string]any{"error": map[string]string{"code": "refused", "message": "the most per trade must be $10 to $100"}})
+			return
+		}
+		f.limits[r.PathValue("t")] = in
+		reply(w, 200, limitsOf(r.PathValue("t")))
 	})
 	mux.HandleFunc("GET /v1/tenants/{t}/wallet", func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
@@ -942,7 +968,28 @@ func TestAWalletIsConnectedFromTheBrowser(t *testing.T) {
 	if !strings.Contains(body, "Connected") || !strings.Contains(body, "$1500.50") || !strings.Contains(body, "ETH") || strings.Contains(body, "data-connect") || !strings.Contains(body, "Wallet connected.") {
 		t.Fatalf("the connected wallet: %s", body)
 	}
-	if tenant == "" {
-		t.Fatal("no tenant")
+	if !strings.Contains(body, "Your limits") || !strings.Contains(body, `name="max_usd" min="10" max="100"`) || !strings.Contains(body, "Today's P&amp;L -$1.25") {
+		t.Fatalf("the limits form: %s", body)
+	}
+	resp, _ = r.post("/wallet/limits", url.Values{"csrf": {csrf}, "max_usd": {"25"}, "max_leverage": {"1"}, "daily_loss_usd": {"10"}})
+	if resp.StatusCode != 303 {
+		t.Fatalf("save limits: %d", resp.StatusCode)
+	}
+	r.engine.mu.Lock()
+	saved := r.engine.limits[tenant]
+	r.engine.mu.Unlock()
+	if saved != (api.Limits{MaxUSD: 25, MaxLeverage: 1, DailyLossUSD: 10}) {
+		t.Fatalf("the engine got %+v", saved)
+	}
+	if _, body = r.get("/wallet"); !strings.Contains(body, "Limits saved.") || !strings.Contains(body, `value="25"`) {
+		t.Fatalf("after saving: %s", body)
+	}
+	r.post("/wallet/limits", url.Values{"csrf": {csrf}, "max_usd": {"500"}, "max_leverage": {"1"}, "daily_loss_usd": {"10"}})
+	if _, body = r.get("/wallet"); !strings.Contains(body, "the most per trade must be $10 to $100") {
+		t.Fatalf("a refused limit is explained: %s", body)
+	}
+	r.post("/wallet/limits", url.Values{"csrf": {csrf}, "max_usd": {"lots"}, "max_leverage": {"1"}, "daily_loss_usd": {"10"}})
+	if _, body = r.get("/wallet"); !strings.Contains(body, "Write each limit as a number.") {
+		t.Fatalf("a limit that is not a number: %s", body)
 	}
 }

@@ -93,6 +93,7 @@ func (s *Service) Run(ctx context.Context) error {
 	}
 	go s.deliver(ctx)
 	go s.radar(ctx)
+	go s.notices(ctx)
 	s.Logf("notifier running as @%s", s.name)
 	return s.listen(ctx)
 }

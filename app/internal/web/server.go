@@ -103,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 		"GET /wallet":                            s.wallet,
 		"POST /wallet/approvals":                 s.walletApprovals,
 		"POST /wallet/approve":                   s.walletApprove,
+		"POST /wallet/limits":                    s.walletLimits,
 		"POST /telegram/links":                   s.telegramLink,
 		"POST /telegram/chats/{chat}/disconnect": s.telegramDisconnect,
 		"GET /settings":                          s.settings,
@@ -312,6 +313,12 @@ func parseTemplates() map[string]*template.Template {
 	funcs := template.FuncMap{
 		"when": func(t time.Time) string { return t.UTC().Format("Jan 2, 15:04") + " UTC" },
 		"usd":  func(f float64) string { return strconv.FormatFloat(f, 'f', 2, 64) },
+		"signed": func(f float64) string {
+			if f < 0 {
+				return "-$" + strconv.FormatFloat(-f, 'f', 2, 64)
+			}
+			return "+$" + strconv.FormatFloat(f, 'f', 2, 64)
+		},
 	}
 	base := template.Must(template.New("").Funcs(funcs).ParseFS(files, "templates/layout.html", "templates/partials/*.html"))
 	pages, err := fs.Glob(files, "templates/pages/*.html")

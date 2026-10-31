@@ -68,6 +68,11 @@ func openFleet(ctx context.Context, e env) (*fleet.Service, func(), error) {
 			return nil, nil, errors.New("TRADE_MAX_LEVERAGE is 1 to 50")
 		}
 	}
+	if v := os.Getenv("TRADE_MAX_DAILY_LOSS_USD"); v != "" {
+		if svc.TradeMaxDailyLossUSD, err = strconv.ParseFloat(v, 64); err != nil || svc.TradeMaxDailyLossUSD < 1 {
+			return nil, nil, errors.New("TRADE_MAX_DAILY_LOSS_USD is the most an account may lose in a day, in dollars, at least 1")
+		}
+	}
 	return svc, st.Close, nil
 }
 
@@ -76,10 +81,12 @@ func serve(ctx context.Context, svc *fleet.Service, e env, out io.Writer) error 
 	logf := func(format string, args ...any) {
 		fmt.Fprintf(out, "%s %s\n", time.Now().UTC().Format("2006-01-02 15:04:05Z"), fmt.Sprintf(format, args...))
 	}
+	svc.Logf = logf
 	rl, sampled, err := startRadar(ctx, e, svc.Store, logf)
 	if err != nil {
 		return err
 	}
+	startWatch(ctx, svc, logf)
 	done, err := startAPI(ctx, svc, rl, sampled, logf)
 	if err != nil {
 		return err
@@ -87,6 +94,30 @@ func serve(ctx context.Context, svc *fleet.Service, e env, out io.Writer) error 
 	<-ctx.Done()
 	<-done
 	return nil
+}
+
+// startWatch records every connected account's fills and the notices they
+// raise, every 30 seconds. A failure ends only that run; it starts again a
+// minute later.
+func startWatch(ctx context.Context, svc *fleet.Service, logf func(string, ...any)) {
+	go func() {
+		for ctx.Err() == nil {
+			func() {
+				defer func() {
+					if p := recover(); p != nil {
+						logf("fills panic: %v", p)
+					}
+				}()
+				if err := svc.Watch(ctx, 30*time.Second); err != nil && ctx.Err() == nil {
+					logf("fills: %v", err)
+				}
+			}()
+			select {
+			case <-ctx.Done():
+			case <-time.After(time.Minute):
+			}
+		}
+	}()
 }
 
 // startAPI opens the engine API, for the app, when ENGINE_API_TOKEN is set.

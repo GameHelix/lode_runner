@@ -158,6 +158,7 @@ func TestTheSpecMatchesTheCode(t *testing.T) {
 
 	types := map[string]any{
 		"NewTenant": api.NewTenant{}, "Tenant": api.Tenant{}, "Error": api.Error{}, "Health": api.Health{},
+		"Limits": api.Limits{}, "AccountLimits": api.AccountLimits{}, "Notice": api.Notice{}, "NoticeList": api.NoticeList{},
 		"RadarAlert": api.RadarAlert{}, "RadarAlertList": api.RadarAlertList{}, "Wallet": api.Wallet{}, "WalletAccount": api.WalletAccount{},
 		"PerpPosition": api.PerpPosition{}, "WalletApprovals": api.WalletApprovals{}, "Signature": api.Signature{}, "SignedAction": api.SignedAction{}, "WalletApproval": api.WalletApproval{},
 		"NewTrade": api.NewTrade{}, "Trade": api.Trade{}, "TradeSuggestion": api.TradeSuggestion{}, "Momentum": api.Momentum{}, "CloseTrade": api.CloseTrade{}, "ClosedTrade": api.ClosedTrade{},
@@ -284,5 +285,41 @@ func TestHealthFailsWhenTheRadarStopsSampling(t *testing.T) {
 	mu.Unlock()
 	if status, h := check(); status != http.StatusServiceUnavailable || h.OK || h.RadarSampledAt == nil {
 		t.Fatalf("a radar silent for six minutes fails the check: %d %+v", status, h)
+	}
+}
+
+func TestLimitsAndNoticesThroughTheAPI(t *testing.T) {
+	c, ctx := newClient(t), context.Background()
+	tn, err := c.CreateTenant(ctx, api.NewTenant{Name: "alice"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	l, err := c.Limits(ctx, tn.ID)
+	if err != nil || l.Limits != l.Caps || l.Caps != (api.Limits{MaxUSD: 100, MaxLeverage: 5, DailyLossUSD: 50}) || l.TodayPnl != 0 {
+		t.Fatalf("an account without its own limits has the caps: %+v %v", l, err)
+	}
+	if _, err := c.SetLimits(ctx, tn.ID, api.Limits{MaxUSD: 1000, MaxLeverage: 2, DailyLossUSD: 10}); code(err) != "refused" {
+		t.Fatalf("above the caps: %v", err)
+	}
+	if l, err = c.SetLimits(ctx, tn.ID, api.Limits{MaxUSD: 25, MaxLeverage: 1, DailyLossUSD: 10}); err != nil || l.Limits != (api.Limits{MaxUSD: 25, MaxLeverage: 1, DailyLossUSD: 10}) {
+		t.Fatalf("set: %+v %v", l, err)
+	}
+	// Notices reach the notifier: the latest, those after a seq, and the stream.
+	get := func(path, bearer string) *http.Response {
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	var list api.NoticeList
+	resp := get("/v1/notices", notifierBearer)
+	if json.NewDecoder(resp.Body).Decode(&list); resp.StatusCode != 200 || len(list.Notices) != 0 {
+		t.Fatalf("no notices yet: %d %+v", resp.StatusCode, list)
+	}
+	if resp := get("/v1/tenants/"+tn.ID+"/limits", notifierBearer); resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("the notifier's token reads limits: %d", resp.StatusCode)
 	}
 }

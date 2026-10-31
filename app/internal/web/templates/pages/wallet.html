@@ -70,7 +70,7 @@
               {{.EntryPx}}
             </td>
             <td>
-              ${{usd .UnrealizedPnl}}
+              {{signed .UnrealizedPnl}}
             </td>
             <td class="muted">
               {{.LiquidationPx}}
@@ -88,7 +88,29 @@
     <p class="muted">
       The agent wallet <code>{{.AgentAddress}}</code> places and cancels orders for this account and can never withdraw. Revoke it on Hyperliquid at any time.
     </p>
-    {{end}}{{end}}{{if not (and .Data.Wallet .Data.Wallet.AgentApproved)}}
+    {{end}}{{end}}{{with .Data.Limits}}
+    <form method="post" action="/wallet/limits" class="password-form" id="limits">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <h3>
+        Your limits
+      </h3>
+      <p class="muted">
+        Today's P&amp;L {{signed .TodayPnl}}. Once the day's losses reach the daily cap, no trade opens until 00:00 UTC.
+      </p>
+      <div class="form-two-col">
+        <label>
+          Most per trade, $<input type="number" name="max_usd" min="10" max="{{.Caps.MaxUSD}}" step="1" value="{{.Limits.MaxUSD}}" required>
+        </label>
+        <label>
+          Most leverage<input type="number" name="max_leverage" min="1" max="{{.Caps.MaxLeverage}}" step="1" value="{{.Limits.MaxLeverage}}" required>
+        </label>
+        <label>
+          Daily loss cap, $<input type="number" name="daily_loss_usd" min="1" max="{{.Caps.DailyLossUSD}}" step="1" value="{{.Limits.DailyLossUSD}}" required>
+        </label>
+      </div>
+      <button>Save limits {{template "icon-arrow"}}</button>
+    </form>
+    {{end}}{{if not (and .Data.Wallet .Data.Wallet.AgentApproved)}}
     <div class="soft-note">
       {{template "icon-info"}} Your browser wallet, MetaMask or Rabby, asks you to sign one approval. It costs nothing and moves no money.
     </div>

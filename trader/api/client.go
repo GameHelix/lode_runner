@@ -123,3 +123,15 @@ func (c *Client) ApproveWallet(ctx context.Context, tenant string, a WalletAppro
 	var out Wallet
 	return out, c.do(ctx, http.MethodPost, tenantPath(tenant, "wallet", "approvals"), a, &out)
 }
+
+// Limits returns the account's limits, the engine's caps and today's P&L.
+func (c *Client) Limits(ctx context.Context, tenant string) (AccountLimits, error) {
+	var out AccountLimits
+	return out, c.do(ctx, http.MethodGet, tenantPath(tenant, "limits"), nil, &out)
+}
+
+// SetLimits replaces the account's own limits, which stay within the caps.
+func (c *Client) SetLimits(ctx context.Context, tenant string, l Limits) (AccountLimits, error) {
+	var out AccountLimits
+	return out, c.do(ctx, http.MethodPut, tenantPath(tenant, "limits"), l, &out)
+}

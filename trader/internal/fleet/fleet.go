@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -34,10 +35,16 @@ type Service struct {
 	// of a basis point, that accounts approve.
 	Exchange func(mode string) *hyperliquid.Client
 	Builder  hyperliquid.Builder
-	// TradeMaxUSD and TradeMaxLeverage cap every trade; zero takes the
-	// defaults of $100 and 5x.
-	TradeMaxUSD      float64
-	TradeMaxLeverage int
+	// TradeMaxUSD and TradeMaxLeverage cap every trade, and
+	// TradeMaxDailyLossUSD every account's losses in a day; zero takes the
+	// defaults of $100, 5x and $50. Accounts may set lower limits.
+	TradeMaxUSD          float64
+	TradeMaxLeverage     int
+	TradeMaxDailyLossUSD float64
+	Logf                 func(format string, args ...any)
+
+	mu   sync.Mutex
+	subs map[chan struct{}]bool
 }
 
 // AddTenant creates a tenant, under the given ID or a new one. An ID that

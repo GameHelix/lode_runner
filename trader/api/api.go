@@ -224,3 +224,33 @@ type ClosedTrade struct {
 	Remaining      float64 `json:"remaining"`
 	StopsCancelled int     `json:"stops_cancelled"`
 }
+
+// Limits are what an account allows itself on each trade and each day.
+type Limits struct {
+	MaxUSD       float64 `json:"max_usd"`
+	MaxLeverage  int     `json:"max_leverage"`
+	DailyLossUSD float64 `json:"daily_loss_usd"`
+}
+
+// AccountLimits is an account's limits, the engine's caps on them, and
+// what the account made or lost today (UTC) on closed positions, net of
+// fees. Trading stops for the day once the loss reaches the daily cap.
+type AccountLimits struct {
+	Limits   Limits  `json:"limits"`
+	Caps     Limits  `json:"caps"`
+	TodayPnl float64 `json:"today_pnl"`
+}
+
+// Notice is something an account's chats are told about its trading: a
+// stop or a take-profit that hit, a liquidation, or a trade made on the
+// account elsewhere.
+type Notice struct {
+	Seq      int64     `json:"seq"`
+	TenantID string    `json:"tenant_id"`
+	At       time.Time `json:"at"`
+	Text     string    `json:"text"`
+}
+
+type NoticeList struct {
+	Notices []Notice `json:"notices"`
+}

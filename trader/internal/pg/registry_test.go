@@ -179,3 +179,85 @@ func TestRadarAlertsAreKeptInOrder(t *testing.T) {
 		t.Fatalf("last: %+v %v", last, err)
 	}
 }
+
+func TestTradingRecordsStayWithTheirAccount(t *testing.T) {
+	url := testDB(t)
+	ctx := context.Background()
+	s, err := Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	a, b := uuid.New(), uuid.New()
+	for _, id := range []uuid.UUID{a, b} {
+		if err := s.CreateTenant(ctx, Tenant{ID: id, Name: id.String()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, ok, err := s.WatchFrom(ctx, a); ok || err != nil {
+		t.Fatalf("an account the engine never traded for has nothing to watch: %v %v", ok, err)
+	}
+	if err := s.AddOrders(ctx, a, []Order{{OID: 1, Kind: OrderOpen, Coin: "ETH"}, {OID: 2, Kind: OrderStop, Coin: "ETH"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := s.WatchFrom(ctx, a); !ok || err != nil {
+		t.Fatalf("watched from the first order: %v %v", ok, err)
+	}
+	at := time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
+	stop := Fill{TID: 10, OID: 2, At: at, Coin: "ETH", Dir: "Close Long", Size: 0.0125, Price: 1800, ClosedPnl: -2.5, Fee: 0.01}
+	for i, want := range []int{1, 0} {
+		added, err := s.AddFills(ctx, a, []Fill{stop})
+		if err != nil || len(added) != want {
+			t.Fatalf("round %d added %v: %v", i, added, err)
+		}
+	}
+	if from, ok, _ := s.WatchFrom(ctx, a); !ok || !from.Equal(at) {
+		t.Fatalf("watched from the newest fill: %v", from)
+	}
+	if pnl, err := s.PnlSince(ctx, a, at.Add(-time.Hour)); err != nil || pnl != -2.51 {
+		t.Fatalf("pnl %v %v", pnl, err)
+	}
+	if o, _ := s.Orders(ctx, a, []int64{2, 99}); len(o) != 1 || o[2].Kind != OrderStop {
+		t.Fatalf("orders %+v", o)
+	}
+	if o, _ := s.Orders(ctx, b, []int64{2}); len(o) != 0 {
+		t.Fatalf("another account sees the orders: %+v", o)
+	}
+	if pnl, _ := s.PnlSince(ctx, b, at.Add(-time.Hour)); pnl != 0 {
+		t.Fatalf("another account sees the fills: %v", pnl)
+	}
+	n1, err := s.AddNotice(ctx, a, "🛑 Stop hit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	n2, _ := s.AddNotice(ctx, b, "🎯 Take-profit hit")
+	if all, err := s.NoticesAfter(ctx, 0, 10); err != nil || len(all) != 2 || all[0] != n1 || all[1].Tenant != b {
+		t.Fatalf("the notifier reads every account's notices in order: %+v %v", all, err)
+	}
+	if last, err := s.LastNotice(ctx); err != nil || last != n2.Seq {
+		t.Fatalf("last notice %d %v", last, err)
+	}
+	if _, ok, err := s.Limits(ctx, a); ok || err != nil {
+		t.Fatalf("no limits set: %v %v", ok, err)
+	}
+	for _, l := range []Limits{{MaxUSD: 50, MaxLeverage: 3, DailyLossUSD: 20}, {MaxUSD: 25, MaxLeverage: 1, DailyLossUSD: 10}} {
+		if err := s.SetLimits(ctx, a, l); err != nil {
+			t.Fatal(err)
+		}
+		if got, ok, err := s.Limits(ctx, a); !ok || err != nil || got != l {
+			t.Fatalf("limits %+v %v %v", got, ok, err)
+		}
+	}
+	if _, ok, _ := s.Limits(ctx, b); ok {
+		t.Fatal("another account got the limits")
+	}
+	master, _ := vault.NewMasterKey()
+	v, _ := vault.New(master)
+	sealed, _ := v.Seal([]byte("x"), []byte(`{"key":"k"}`))
+	if err := s.PutCredential(ctx, Credential{ID: uuid.New(), Tenant: b, Kind: "hyperliquid", Label: "wallet", Hint: "0xagent", Sealed: sealed}); err != nil {
+		t.Fatal(err)
+	}
+	if ids, err := s.WalletTenants(ctx); err != nil || len(ids) != 1 || ids[0] != b {
+		t.Fatalf("accounts with a wallet: %v %v", ids, err)
+	}
+}

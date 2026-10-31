@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/candylario/candylario/trader/api"
 )
@@ -19,7 +20,8 @@ import (
 const walletMode = "testnet"
 
 type walletPage struct {
-	Wallet  *api.Wallet // nil until the engine has made one
+	Wallet  *api.Wallet        // nil until the engine has made one
+	Limits  *api.AccountLimits // once the wallet is connected
 	Mode    string
 	Problem string
 }
@@ -37,7 +39,34 @@ func (s *Server) wallet(w http.ResponseWriter, r *http.Request) {
 	default:
 		p.Wallet = &wl
 	}
+	if p.Wallet != nil && p.Wallet.AgentApproved {
+		if l, err := s.Engine.Limits(ctx, current(r).User.TenantID.String()); err == nil {
+			p.Limits = &l
+		} else {
+			s.Logf("engine: %v", err)
+		}
+	}
 	s.render(w, r, "wallet.html", http.StatusOK, page{Title: "Wallet", Data: p})
+}
+
+// walletLimits saves the account's own limits.
+func (s *Server) walletLimits(w http.ResponseWriter, r *http.Request) {
+	maxUSD, err1 := strconv.ParseFloat(r.PostFormValue("max_usd"), 64)
+	maxLev, err2 := strconv.Atoi(r.PostFormValue("max_leverage"))
+	loss, err3 := strconv.ParseFloat(r.PostFormValue("daily_loss_usd"), 64)
+	if err := errors.Join(err1, err2, err3); err != nil {
+		s.flash(w, "Write each limit as a number.")
+		http.Redirect(w, r, "/wallet", http.StatusSeeOther)
+		return
+	}
+	ctx, cancel := callCtx(r)
+	defer cancel()
+	if _, err := s.Engine.SetLimits(ctx, current(r).User.TenantID.String(), api.Limits{MaxUSD: maxUSD, MaxLeverage: maxLev, DailyLossUSD: loss}); err != nil {
+		s.flash(w, userMessage(err))
+	} else {
+		s.flash(w, "Limits saved.")
+	}
+	http.Redirect(w, r, "/wallet", http.StatusSeeOther)
 }
 
 // walletApprovals gives the page's script what the browser wallet signs.

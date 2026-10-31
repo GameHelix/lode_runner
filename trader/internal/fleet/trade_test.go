@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -26,6 +27,15 @@ type fakePerps struct {
 	actions  []map[string]any
 	resting  map[int64]bool
 	nextOID  int64
+	fills    []map[string]any // what userFillsByTime reports
+}
+
+// fill adds an execution of an order to what the exchange reports.
+func (f *fakePerps) fill(oid int64, dir string, px, sz, pnl float64) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.fills = append(f.fills, map[string]any{"coin": "ETH", "px": fmt.Sprint(px), "sz": fmt.Sprint(sz), "side": "A", "time": time.Now().UnixMilli(),
+		"startPosition": "0", "dir": dir, "closedPnl": fmt.Sprint(pnl), "hash": "0x0", "oid": oid, "crossed": true, "fee": "0.01", "tid": len(f.fills) + 1, "feeToken": "USDC"})
 }
 
 func (f *fakePerps) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -74,6 +84,8 @@ func (f *fakePerps) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			pos = fmt.Sprintf(`[{"type":"oneWay","position":{"coin":"ETH","szi":"%v","leverage":{"type":"cross","value":3},"entryPx":"2001","positionValue":"50","unrealizedPnl":"0","liquidationPx":"1500","marginUsed":"17"}}]`, f.position)
 		}
 		w.Write([]byte(`{"marginSummary":{"accountValue":"1000","totalMarginUsed":"17"},"withdrawable":"900","assetPositions":` + pos + `,"time":1700000000000}`))
+	case "userFillsByTime":
+		json.NewEncoder(w).Encode(f.fills)
 	case "frontendOpenOrders":
 		var orders []map[string]any
 		for oid := range f.resting {
@@ -176,5 +188,83 @@ func TestATradeOpensWithItsStopsAndClosesCleanly(t *testing.T) {
 	close := fake.actions[0]["orders"].([]any)[0].(map[string]any)
 	if close["b"] != false || close["r"] != true || close["p"] != "1980" || close["s"] != "0.025" {
 		t.Fatalf("close order %v", close)
+	}
+}
+
+func TestFillsAreRecordedAndStopsAnnounced(t *testing.T) {
+	s := service(t)
+	fake := &fakePerps{user: "0x5e9ee1089755c3435139848e47e6635505d5a13a", resting: map[int64]bool{}, nextOID: 10}
+	srv := httptest.NewServer(fake)
+	defer srv.Close()
+	s.Exchange = func(mode string) *hyperliquid.Client { return &hyperliquid.Client{BaseURL: srv.URL} }
+	ctx := context.Background()
+	tenant := uuid.New()
+	if err := s.Store.CreateTenant(ctx, pg.Tenant{ID: tenant, Name: "acme"}); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.WalletApprovals(ctx, tenant, fake.user, "testnet", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, _ := hyperliquid.NewSigner("0x0123456789012345678901234567890123456789012345678901234567890123")
+	raw, _ := json.Marshal(a.ApproveAgent.Action)
+	sig, _ := a.ApproveAgent.Sign(account)
+	if _, err := s.ApproveWallet(ctx, tenant, fake.user, "testnet", Signed{Action: raw, Nonce: a.ApproveAgent.Nonce, Signature: sig}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.watch(ctx, tenant); err != nil {
+		t.Fatal("an account the engine never traded for is skipped:", err)
+	}
+	tr, err := s.OpenTrade(ctx, tenant, TradeRequest{Coin: "ETH", Side: "long", USD: 50, Leverage: 2, StopLossPct: 0.10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wake, stop := s.SubscribeNotices()
+	defer stop()
+	// The open fills, the stop hits while the engine is away, and someone
+	// trades on the account elsewhere.
+	fake.fill(tr.OID, "Open Long", 2001, 0.025, 0)
+	fake.fill(tr.StopOID, "Close Long", 1800, 0.015, -3)
+	fake.fill(tr.StopOID, "Close Long", 1800, 0.01, -2)
+	fake.fill(999, "Open Short", 1990, 0.01, 0)
+	if err := s.watch(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	notices, _ := s.Store.NoticesAfter(ctx, 0, 10)
+	var texts []string
+	for _, n := range notices {
+		texts = append(texts, n.Text)
+	}
+	if len(texts) != 2 || texts[0] != "🛑 Stop hit: close long 0.025 ETH at $1800 · P&L -$5.02 🧪 testnet" || texts[1] != "Trade on your account: open short 0.01 ETH at $1990 🧪 testnet" {
+		t.Fatalf("notices %q", texts)
+	}
+	select {
+	case <-wake:
+	default:
+		t.Fatal("the notice stream was not woken")
+	}
+	if err := s.watch(ctx, tenant); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Store.NoticesAfter(ctx, 0, 10); len(again) != 2 {
+		t.Fatalf("a second pass repeats: %d", len(again))
+	}
+
+	// Today's loss of $5.02 against a $5 cap: no more trades today.
+	var refused *Refused
+	if err := s.SetLimits(ctx, tenant, pg.Limits{MaxUSD: 500, MaxLeverage: 3, DailyLossUSD: 5}); !errors.As(err, &refused) {
+		t.Fatalf("limits above the engine's caps: %v", err)
+	}
+	if err := s.SetLimits(ctx, tenant, pg.Limits{MaxUSD: 40, MaxLeverage: 2, DailyLossUSD: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if l, caps, err := s.Limits(ctx, tenant); err != nil || l != (pg.Limits{MaxUSD: 40, MaxLeverage: 2, DailyLossUSD: 5}) || caps.MaxUSD != 100 || caps.DailyLossUSD != 50 {
+		t.Fatalf("limits %+v caps %+v %v", l, caps, err)
+	}
+	if _, err := s.OpenTrade(ctx, tenant, TradeRequest{Coin: "ETH", Side: "long", USD: 45, Leverage: 1, StopLossPct: 0.10}); !errors.As(err, &refused) || !strings.Contains(err.Error(), "$40") {
+		t.Fatalf("a trade above the account's own limit: %v", err)
+	}
+	if _, err := s.OpenTrade(ctx, tenant, TradeRequest{Coin: "ETH", Side: "long", USD: 20, Leverage: 1, StopLossPct: 0.10}); !errors.As(err, &refused) || !strings.Contains(err.Error(), "daily cap") {
+		t.Fatalf("a trade past the daily loss cap: %v", err)
 	}
 }
