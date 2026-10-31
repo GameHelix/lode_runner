@@ -27,13 +27,9 @@ variable "name" {
 }
 
 variable "location" {
-  description = "A Hetzner location outside the US, which Binance refuses."
+  description = "The Hetzner location."
   type        = string
   default     = "fsn1"
-  validation {
-    condition     = !contains(["ash", "hil"], var.location)
-    error_message = "Binance refuses US addresses; pick fsn1, nbg1, hel1 or sin."
-  }
 }
 
 variable "server_type" {

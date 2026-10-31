@@ -1,6 +1,8 @@
 # research
 
-Hypothesis tests on the Binance archive (1-minute candles for every USDT pair since 2017, futures candles, open interest, funding), read from its copy on Hugging Face, [ismatsamadov/binance-usdt-archive](https://huggingface.co/datasets/ismatsamadov/binance-usdt-archive). A full scan downloads tens of gigabytes; for repeated runs, download the sets once and point `BINANCE_DATA` at that folder. Each script in `hypotheses/` tests one idea and writes a table to `results/`.
+Hypothesis tests on the Binance archive (1-minute candles for every USDT pair since 2017, futures candles, open interest, funding), read from its copy on Hugging Face, [ismatsamadov/binance-usdt-archive](https://huggingface.co/datasets/ismatsamadov/binance-usdt-archive). A full scan downloads tens of gigabytes; for repeated runs, download the sets once and point `BINANCE_DATA` at that folder. Each script in `hypotheses/` tests one idea and writes a table to `results/`. The radar uses four of them:
+- `after_move_perps.json`, `crash_bounce_perps.json`, `funding.json` and `triggers.json` become `trader/internal/radar/history_*.json`.
+- `five_green_confirmed.md` gives the momentum-run record.
 
     python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
     .venv/bin/python -I hypotheses/after_move.py
