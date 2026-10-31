@@ -60,6 +60,8 @@ Every setting lives on the server in one file, `/srv/secrets/candylario.env` (mo
 
 Every night `backup/backup.sh` on the server copies the three databases to S3-style object storage (Hetzner Object Storage), encrypted with [age](https://age-encryption.org) to `BACKUP_AGE_RECIPIENT`. The secret half, `BACKUP_AGE_IDENTITY`, is in the server's settings file, so a lost server also loses it: keep a copy of `/srv/secrets` somewhere else. Thirty days are kept, and a failed night emails the admin.
 
+The **backup** workflow in GitHub Actions runs these: install, which also backs up once, or check, which proves the latest night of each database in a scratch database. From a machine with SSH to the server:
+
 ```sh
 ./backup/install.sh deploy@SERVER --now               # install, and back up once
 ./backup/restore.sh deploy@SERVER                     # the days stored

@@ -191,7 +191,7 @@ func (s *Server) fail(w http.ResponseWriter, r *http.Request, err error) {
 		ae = &apiError{http.StatusInternalServerError, "internal", "internal error"}
 	}
 	if r.Method != http.MethodGet || ae.status >= 500 {
-		s.Logf("api %s %d %s", r.Pattern, ae.status, ae.code)
+		s.Logf("api %s %d %s: %s", r.Pattern, ae.status, ae.code, ae.message)
 	}
 	writeJSON(w, ae.status, map[string]any{"error": api.Error{Code: ae.code, Message: ae.message}})
 }

@@ -222,7 +222,7 @@ func (s *Service) ApproveWallet(ctx context.Context, tenant uuid.UUID, user, mod
 		return Wallet{}, err
 	}
 	if err := ex.SubmitRaw(ctx, agent.Action, agent.Nonce, agent.Signature); err != nil {
-		return Wallet{}, refusef("the exchange refused the agent approval: %v", err)
+		return Wallet{}, refusef("the exchange refused the agent approval from %s: %v", user, err)
 	}
 	if builder != nil {
 		if err := checkAction(builder.Action, "approveBuilderFee", mode, "builder", s.Builder.Address); err != nil {
