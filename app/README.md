@@ -1,9 +1,10 @@
 # app
 
-The Candylario app: the public pages (the radar, its alerts and their records, the legal texts), accounts, and connecting a Telegram chat to an account. Server-rendered Go pages with htmx and its own Postgres. Accounts get a tenant in the engine, reached only through the [engine API](../trader/api/openapi.yaml); Telegram chats connect through the notifier's API.
+The Candylario app: the public pages (the radar, its alerts and their records, the legal texts), accounts, connecting a Telegram chat and a wallet to an account. Server-rendered Go pages with htmx and its own Postgres. Accounts get a tenant in the engine, reached only through the [engine API](../trader/api/openapi.yaml); Telegram chats connect through the notifier's API.
 
 - **Accounts:** email and password. The address is confirmed by an emailed link before anything else, and then the account gets an engine tenant. A forgotten password is reset by email, and a changed one is reported by email. Mail goes through Mailjet, whose bounce, blocked and spam reports (`/webhooks/mailjet`, basic auth `mailjet:MAILJET_WEBHOOK_SECRET`) show on the confirm page.
 - **Telegram:** a one-time link connects a private chat to the account; `/telegram` lists and disconnects chats.
+- **Wallet:** `/wallet` connects a Hyperliquid wallet, on testnet for now: the browser wallet approves the engine's agent wallet, and the page shows the account, its positions and the trade limits.
 - **Admin:** `/admin` lists every account with its address. Admins are the confirmed accounts whose address is in `ADMIN_EMAILS`; nothing in the app can make anyone else one.
 - **Deleting an account** closes its engine tenant, disconnects its chats and forgets it.
 

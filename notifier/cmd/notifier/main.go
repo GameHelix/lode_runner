@@ -25,7 +25,7 @@ import (
 	"github.com/candylario/candylario/notifier/internal/telegram"
 )
 
-const usage = `notifier — Candylario agents' messages on Telegram, and commands back
+const usage = `notifier — the Candylario bot: radar alerts, trades and notices on Telegram
 
   notifier serve                  run the bot and the API for the app
   notifier link --tenant ID       print a one-time link that connects a
