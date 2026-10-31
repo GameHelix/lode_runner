@@ -29,16 +29,17 @@ ssh "$host" bash -s -- "$day" "$svc" "$db" <<'RESTORE'
 set -euo pipefail
 day=$1 svc=$2 db=$3
 cd "/srv/$svc"
-pg() { docker compose exec -T postgres "$@"; }
+# docker compose exec reads stdin, which is the rest of this script.
+pg() { docker compose exec -T postgres "$@" </dev/null; }
 if [ "$db" = "$svc" ]; then
-  docker compose stop "$svc"
+  docker compose stop "$svc" </dev/null
 else
   pg dropdb -U "$svc" --if-exists restore_check
   pg createdb -U "$svc" restore_check
 fi
-/srv/backup/backup.sh cat "$day" "$svc.sql.gz" | gunzip | pg psql -q -v ON_ERROR_STOP=1 -U "$svc" -d "$db" >/dev/null
+/srv/backup/backup.sh cat "$day" "$svc.sql.gz" | gunzip | docker compose exec -T postgres psql -q -v ON_ERROR_STOP=1 -U "$svc" -d "$db" >/dev/null
 if [ "$db" = "$svc" ]; then
-  docker compose start "$svc"
+  docker compose start "$svc" </dev/null
   echo "restored $svc from $day"
   exit
 fi
