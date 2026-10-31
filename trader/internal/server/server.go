@@ -36,6 +36,10 @@ type Server struct {
 	// Radar, when set, is the radar's alert log, served to the notifier
 	// and the app.
 	Radar *radar.Log
+	// RadarSampled, when set, tells when the radar last read the markets,
+	// or when it started if it has not yet; the health check fails when
+	// that is too long ago.
+	RadarSampled func() time.Time
 }
 
 // Serve answers on the listener until ctx ends, then closes every stream.
@@ -238,14 +242,28 @@ func created(isNew bool) int {
 	return http.StatusOK
 }
 
-// health answers 200 when the database answers, and 503 otherwise.
+// radarStale is how long the radar may go without reading the markets
+// before the health check fails: long enough for a restart's warm-up.
+const radarStale = 5 * time.Minute
+
+// health answers 200 when the database answers and the radar samples, and
+// 503 otherwise.
 func (s *Server) health(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 	defer cancel()
 	if err := s.Fleet.Store.Ping(ctx); err != nil {
 		return 0, nil, &apiError{http.StatusServiceUnavailable, "internal", "the database does not answer"}
 	}
-	return http.StatusOK, api.Health{OK: true, Commit: s.Commit}, nil
+	out := api.Health{OK: true, Commit: s.Commit}
+	if s.RadarSampled != nil {
+		at := s.RadarSampled().UTC()
+		out.RadarSampledAt = &at
+		if time.Since(at) > radarStale {
+			out.OK = false
+			return http.StatusServiceUnavailable, out, nil
+		}
+	}
+	return http.StatusOK, out, nil
 }
 
 func spec(w http.ResponseWriter, r *http.Request) {

@@ -19,7 +19,7 @@ paths:
   /v1/health:
     get:
       summary: Whether the engine can work, for an uptime monitor
-      description: 200 when the database answers, 503 when it does not.
+      description: 200 when the database answers and the radar has read the markets in the last five minutes (counted from its start while it warms up). 503 otherwise.
       security: []
       responses:
         "200":
@@ -27,7 +27,17 @@ paths:
           content:
             application/json:
               schema: {$ref: "#/components/schemas/Health"}
-        "503": {$ref: "#/components/responses/Error"}
+        "503":
+          description: The radar has not read the markets for five minutes (a Health), or the database is down (an error)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/Health"
+                  - type: object
+                    required: [error]
+                    properties:
+                      error: {$ref: "#/components/schemas/Error"}
   /v1/openapi.yaml:
     get:
       summary: This document
@@ -428,6 +438,7 @@ components:
       properties:
         ok: {type: boolean}
         commit: {type: string, description: The source commit the engine was built from, when known.}
+        radar_sampled_at: {type: string, format: date-time, description: When the radar last read every market, or when it started if it has not yet.}
     NewTenant:
       type: object
       required: [name]

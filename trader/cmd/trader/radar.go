@@ -77,19 +77,21 @@ func quiet(err error) error {
 
 // startRadar runs the radar beside the engine API and keeps its alerts for the
 // API, and in Postgres, so a restart serves them, numbers on and keeps
-// their cooldowns. HYPERLIQUID_URL picks the exchange; the live one by
-// default. A failure ends only that run; the radar starts again a minute
-// later.
-func startRadar(ctx context.Context, e env, store *pg.Store, logf func(string, ...any)) (*radar.Log, error) {
+// their cooldowns. It also returns when the radar last read the markets, or
+// when it started if it has not yet, for the health check. HYPERLIQUID_URL
+// picks the exchange; the live one by default. A failure ends only that
+// run; the radar starts again a minute later.
+func startRadar(ctx context.Context, e env, store *pg.Store, logf func(string, ...any)) (*radar.Log, func() time.Time, error) {
+	started := e.Now()
 	client := &hyperliquid.Client{HTTP: e.HTTP, BaseURL: cmp.Or(os.Getenv("HYPERLIQUID_URL"), hyperliquid.MainnetURL), Now: e.Now}
 	rl := &radar.Log{Store: radarStore{store}, Logf: logf}
 	kept, err := store.LastRadarAlerts(ctx, 1000)
 	if err != nil {
-		return nil, fmt.Errorf("radar alerts: %w", err)
+		return nil, nil, fmt.Errorf("radar alerts: %w", err)
 	}
 	restored, err := radarEntries(kept)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rl.Restore(restored)
 	w := &radar.Watcher{Source: client, Books: client, Now: e.Now, Logf: logf, Alert: func(a radar.Alert) {
@@ -123,7 +125,13 @@ func startRadar(ctx context.Context, e env, store *pg.Store, logf func(string, .
 		}
 	}()
 	logf("radar on %s, %d alerts kept, numbering from %d", client.BaseURL, len(restored), lastSeq(restored))
-	return rl, nil
+	sampled := func() time.Time {
+		if at := w.Sampled(); !at.IsZero() {
+			return at
+		}
+		return started
+	}
+	return rl, sampled, nil
 }
 
 func lastSeq(entries []radar.Entry) int64 {

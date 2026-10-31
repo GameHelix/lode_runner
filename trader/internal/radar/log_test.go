@@ -1,12 +1,15 @@
 package radar
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/candylario/candylario/trader/internal/hyperliquid"
 )
 
 // memStore is a store that keeps every alert, or refuses to.
@@ -107,5 +110,39 @@ func TestRecalledAlertsKeepTheirCooldowns(t *testing.T) {
 	}
 	if _, ok := tr.fundingFlip(at.Add(23*time.Hour), "BTC"); !ok {
 		t.Fatal("the funding flip did not come back after a day")
+	}
+}
+
+// flaky is a market source whose reads fail until it is told otherwise.
+type flaky struct {
+	mu   sync.Mutex
+	fail bool
+}
+
+func (f *flaky) Markets(ctx context.Context) ([]hyperliquid.Asset, []hyperliquid.Market, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.fail {
+		return nil, nil, errors.New("exchange down")
+	}
+	return []hyperliquid.Asset{{Name: "BTC"}}, []hyperliquid.Market{{MidPx: 80000, DayVolumeUSD: 2e9}}, nil
+}
+
+func TestTheWatcherNotesOnlyGoodSamples(t *testing.T) {
+	src := &flaky{fail: true}
+	at := time.Date(2026, 10, 31, 9, 0, 0, 0, time.UTC)
+	w := &Watcher{Source: src, Interval: time.Millisecond, Now: func() time.Time { return at }}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	w.Run(ctx)
+	cancel()
+	if !w.Sampled().IsZero() {
+		t.Fatalf("failed reads count as samples: %v", w.Sampled())
+	}
+	src.fail = false
+	ctx, cancel = context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	w.Run(ctx)
+	if !w.Sampled().Equal(at) {
+		t.Fatalf("a good read is noted: %v", w.Sampled())
 	}
 }

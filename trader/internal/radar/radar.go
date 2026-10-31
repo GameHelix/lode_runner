@@ -9,6 +9,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/candylario/candylario/trader/internal/hyperliquid"
@@ -118,7 +119,17 @@ type Watcher struct {
 	Logf         func(format string, args ...any)
 	Now          func() time.Time
 
-	coins map[string]*track
+	coins   map[string]*track
+	mu      sync.Mutex
+	sampled time.Time
+}
+
+// Sampled is when the watcher last read every market; zero before the
+// first time.
+func (w *Watcher) Sampled() time.Time {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.sampled
 }
 
 type sample struct {
@@ -276,7 +287,11 @@ func (w *Watcher) Run(ctx context.Context) error {
 		if err != nil {
 			w.logf("markets: %v", err)
 		} else {
-			alerts := w.Observe(w.now(), assets, markets)
+			now := w.now()
+			w.mu.Lock()
+			w.sampled = now
+			w.mu.Unlock()
+			alerts := w.Observe(now, assets, markets)
 			samples, raised = samples+1, raised+len(alerts)
 			for _, a := range alerts {
 				if w.Alert != nil {

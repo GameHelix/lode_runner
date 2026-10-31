@@ -76,11 +76,11 @@ func serve(ctx context.Context, svc *fleet.Service, e env, out io.Writer) error 
 	logf := func(format string, args ...any) {
 		fmt.Fprintf(out, "%s %s\n", time.Now().UTC().Format("2006-01-02 15:04:05Z"), fmt.Sprintf(format, args...))
 	}
-	rl, err := startRadar(ctx, e, svc.Store, logf)
+	rl, sampled, err := startRadar(ctx, e, svc.Store, logf)
 	if err != nil {
 		return err
 	}
-	done, err := startAPI(ctx, svc, rl, logf)
+	done, err := startAPI(ctx, svc, rl, sampled, logf)
 	if err != nil {
 		return err
 	}
@@ -93,7 +93,7 @@ func serve(ctx context.Context, svc *fleet.Service, e env, out io.Writer) error 
 // ENGINE_NOTIFIER_TOKEN, when set, is a second token for the notifier that
 // opens only the routes it needs.
 // It returns a channel closed once the API has stopped.
-func startAPI(ctx context.Context, svc *fleet.Service, rl *radar.Log, logf func(string, ...any)) (<-chan struct{}, error) {
+func startAPI(ctx context.Context, svc *fleet.Service, rl *radar.Log, sampled func() time.Time, logf func(string, ...any)) (<-chan struct{}, error) {
 	done := make(chan struct{})
 	token, notifier := os.Getenv("ENGINE_API_TOKEN"), os.Getenv("ENGINE_NOTIFIER_TOKEN")
 	if token == "" {
@@ -111,7 +111,7 @@ func startAPI(ctx context.Context, svc *fleet.Service, rl *radar.Log, logf func(
 	if err != nil {
 		return nil, fmt.Errorf("engine API: %w", err)
 	}
-	srv := &server.Server{Fleet: svc, Radar: rl, Token: token, NotifierToken: notifier, Commit: commit, Logf: logf}
+	srv := &server.Server{Fleet: svc, Radar: rl, RadarSampled: sampled, Token: token, NotifierToken: notifier, Commit: commit, Logf: logf}
 	go func() {
 		defer close(done)
 		if err := srv.Serve(ctx, l); err != nil && ctx.Err() == nil {

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"regexp"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -243,5 +245,42 @@ func TestTheNotifiersTokenOpensOnlyItsRoutes(t *testing.T) {
 	}
 	if status, code := call(http.MethodGet, "/v1/radar/alerts", "", "wrong"); status != http.StatusUnauthorized || code != "unauthorized" {
 		t.Fatalf("a wrong token is unauthorized: %d %s", status, code)
+	}
+}
+
+func TestHealthFailsWhenTheRadarStopsSampling(t *testing.T) {
+	url := testkit.Database(t)
+	ctx := context.Background()
+	if err := pg.Migrate(ctx, url); err != nil {
+		t.Fatal(err)
+	}
+	store, err := pg.Open(ctx, url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var mu sync.Mutex
+	sampled := time.Now().Add(-time.Minute)
+	srv := httptest.NewServer((&Server{Fleet: &fleet.Service{Store: store}, Token: token, Commit: "test", Logf: t.Logf,
+		RadarSampled: func() time.Time { mu.Lock(); defer mu.Unlock(); return sampled }}).Handler())
+	defer srv.Close()
+	check := func() (int, api.Health) {
+		resp, err := http.Get(srv.URL + "/v1/health")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var h api.Health
+		json.NewDecoder(resp.Body).Decode(&h)
+		return resp.StatusCode, h
+	}
+	if status, h := check(); status != http.StatusOK || !h.OK || h.RadarSampledAt == nil || h.RadarSampledAt.Sub(sampled).Abs() > time.Millisecond {
+		t.Fatalf("a radar that sampled a minute ago is healthy: %d %+v", status, h)
+	}
+	mu.Lock()
+	sampled = time.Now().Add(-6 * time.Minute)
+	mu.Unlock()
+	if status, h := check(); status != http.StatusServiceUnavailable || h.OK || h.RadarSampledAt == nil {
+		t.Fatalf("a radar silent for six minutes fails the check: %d %+v", status, h)
 	}
 }

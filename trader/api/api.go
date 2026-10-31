@@ -16,11 +16,14 @@ import (
 //go:embed openapi.yaml
 var Spec []byte
 
-// Health says whether the engine can work: its database answers. Commit
-// is the source commit the engine was built from, when known.
+// Health says whether the engine can work: its database answers and the
+// radar samples the markets. RadarSampledAt is when the radar last read
+// every market, or when it started if it has not yet. Commit is the source
+// commit the engine was built from, when known.
 type Health struct {
-	OK     bool   `json:"ok"`
-	Commit string `json:"commit,omitempty"`
+	OK             bool       `json:"ok"`
+	Commit         string     `json:"commit,omitempty"`
+	RadarSampledAt *time.Time `json:"radar_sampled_at,omitempty"`
 }
 
 type Tenant struct {
