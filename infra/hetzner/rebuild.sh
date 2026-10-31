@@ -57,7 +57,9 @@ ssh "$host" 'sudo umount /mnt/backup'
 
 step "replace the server; the address and the backup volume move to the new one"
 trap - ERR
-tofu apply -input=false -auto-approve -no-color -replace=hcloud_server.host
+# Hetzner sometimes fails a volume attach; a second apply finishes the rest.
+tofu apply -input=false -auto-approve -no-color -replace=hcloud_server.host ||
+  tofu apply -input=false -auto-approve -no-color
 device=$(tofu output -raw backup_device)
 
 step "wait for the new server's first boot"
