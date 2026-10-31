@@ -42,13 +42,15 @@ The domain points at the server's IPv4 address, so it must outlive the server. `
 
 ## Rebuilding the server
 
-Not rehearsed yet; rehearse it on a spare server before relying on it, and write down how long each step took.
+The **rebuild** workflow in GitHub Actions runs `hetzner/rebuild.sh`: plan shows what OpenTofu would change, and rebuild replaces the server.
+1. It snapshots the server at Hetzner, then stops the services and backs them up to the backup volume. The site is down from here to the end.
+2. OpenTofu replaces the server. The address and the volume move to the new one, which boots with the bootstrap and the keys in `ssh_public_keys`, the Actions key among them.
+3. It puts `/srv/secrets` back from the volume, deploys the three services, installs the nightly backup and restores the databases.
+4. It checks `/healthz` and prints the new SSH host key.
 
-1. Make sure last night's backup exists (`./backup/restore.sh deploy@SERVER` lists the days). The backup volume holds it with a copy of `/srv/secrets`: the settings and the OpenTofu state.
-2. In `hetzner/main.tf`, move the address reference to the server side, which only matters at creation: in `hcloud_primary_ip.ipv4` replace `assignee_type` and `assignee_id` with `location = var.location`; in `hcloud_server.host` add `ipv4 = hcloud_primary_ip.ipv4.id` to `public_net`.
-3. `tofu apply -replace=hcloud_server.host`, with the state and token from that copy. The old server goes, the address stays, and the new server boots on it with the bootstrap; SSH host keys change, so remove the old entry from `~/.ssh/known_hosts`.
-4. The apply attaches the backup volume to the new server. Mount it (`sudo mount BACKUP_DEVICE /mnt/backup`), put the settings back (`tar -C /srv -xzf /mnt/backup/DAY/secrets.tar.gz`), deploy the three services, then run the **backup** workflow's install and `./backup/restore.sh deploy@SERVER DAY trader --live` for each service.
-5. Check `https://candy.surf/healthz` shows every service and its commit, and that the bot answers `/help`. DNS needs no change.
+Afterwards, set the `DEPLOY_KNOWN_HOSTS` secret to that key, run `ssh-keygen -R SERVER_IP` wherever else you SSH from, and delete the snapshot once the new server works.
+
+If the old server is dead, the run cannot back it up: attach the volume to a server, take `/srv/secrets` from its newest day, and follow the same steps by hand.
 
 `tofu -chdir=modules/host test` checks the bootstrap.
 

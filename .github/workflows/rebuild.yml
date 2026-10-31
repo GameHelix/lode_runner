@@ -1,0 +1,43 @@
+name: rebuild
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: plan shows what would change; rebuild replaces the server, with the site down for about half an hour
+        required: true
+        type: choice
+        options: [plan, rebuild]
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: deploy
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_wrapper: false
+      - uses: docker/setup-buildx-action@v3
+      - name: SSH to the server
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" >~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" >~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+      - env:
+          HOST: deploy@${{ vars.SERVER_IP }}
+          PLAN: ${{ inputs.confirm == 'plan' && '--plan' || '' }}
+        run: ./infra/hetzner/rebuild.sh "$HOST" $PLAN
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tofu-state
+          path: infra/hetzner/terraform.tfstate
+          retention-days: 3
+          if-no-files-found: ignore

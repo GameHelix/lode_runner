@@ -94,17 +94,16 @@ resource "hcloud_firewall" "web" {
   }
 }
 
-# The IPv4 address outlives the server: users' live Binance keys accept
-# orders only from it, so a rebuilt server must come up on the same one. It
-# was created with the server and imported on 2026-10-28; it is never
-# deleted with the server, and never by an apply. To rebuild, see the README.
+# The IPv4 address outlives the server: the domain points at it, so a rebuilt
+# server comes up on the same one. It was created with the server and
+# imported on 2026-10-28; it is never deleted with the server, and never by an
+# apply. The server takes it at creation; to rebuild, see the README.
 resource "hcloud_primary_ip" "ipv4" {
-  name          = "${var.name}-ipv4"
-  type          = "ipv4"
-  assignee_type = "server"
-  assignee_id   = hcloud_server.host.id
-  auto_delete   = false
-  labels        = { project = "candylario" }
+  name        = "${var.name}-ipv4"
+  type        = "ipv4"
+  location    = var.location
+  auto_delete = false
+  labels      = { project = "candylario" }
 
   lifecycle {
     prevent_destroy = true
@@ -123,11 +122,11 @@ resource "hcloud_server" "host" {
   labels       = { project = "candylario" }
 
   # Changing this block powers the server off (the provider unassigns and
-  # assigns Primary IPs on a stopped server), so it stays as it was at
-  # creation; the kept address references the server from its own
-  # resource instead.
+  # assigns Primary IPs on a stopped server), so it changes only with a
+  # rebuild, which creates the server on the kept address.
   public_net {
     ipv4_enabled = true
+    ipv4         = hcloud_primary_ip.ipv4.id
     ipv6_enabled = true
   }
 
