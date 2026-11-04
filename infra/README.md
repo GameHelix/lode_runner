@@ -38,7 +38,7 @@ Then run `./actions-key.sh deploy@SERVER_IP` once, which gives GitHub Actions it
 
 ## The server's address
 
-The domain points at the server's IPv4 address, so it must outlive the server. `hetzner/main.tf` manages it as `hcloud_primary_ip.ipv4` with `auto_delete = false` and `prevent_destroy`: deleting the server leaves the address in the project, and no apply can delete it. The address references the server from its own resource, and the server's `public_net` block stays as it was at creation, because the provider powers a server off to change that block.
+The domain points at the server's IPv4 address, so it must outlive the server. `hetzner/main.tf` manages it as `hcloud_primary_ip.ipv4` with `auto_delete = false`: deleting the server leaves the address in the project. Only the shutdown destroys it. The address references the server from its own resource, and the server's `public_net` block stays as it was at creation, because the provider powers a server off to change that block.
 
 ## Rebuilding the server
 
@@ -62,6 +62,10 @@ Afterwards, set the `DEPLOY_KNOWN_HOSTS` secret to that key, run `ssh-keygen -R 
 If the old server is dead, the run cannot back it up: attach the volume to a server, take `/srv/secrets` from its newest day, and follow the same steps by hand.
 
 `tofu -chdir=modules/host test` checks the bootstrap.
+
+## Shutting down
+
+The **shutdown** workflow runs `hetzner/shutdown.sh`. Plan lists what the Hetzner project holds and what OpenTofu would destroy. Shutdown stops the services, posts a closing note to the radar channel, destroys the server, its address, the backup volume, the firewalls and the keys, deletes any snapshot left behind, and fails unless the project is then empty.
 
 ## Settings
 

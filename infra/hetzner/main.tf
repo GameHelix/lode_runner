@@ -92,18 +92,15 @@ resource "hcloud_firewall" "web" {
 
 # The IPv4 address outlives the server: the domain points at it, so a rebuilt
 # server comes up on the same one. It was created with the server and
-# imported on 2026-10-28; it is never deleted with the server, and never by an
-# apply. The server takes it at creation; to rebuild, see the README.
+# imported on 2026-10-28; it is never deleted with the server. The server
+# takes it at creation; to rebuild, see the README. Only the shutdown
+# destroys it, which is why nothing protects it any more.
 resource "hcloud_primary_ip" "ipv4" {
   name        = "${var.name}-ipv4"
   type        = "ipv4"
   location    = var.location
   auto_delete = false
   labels      = { project = "candylario" }
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "hcloud_server" "host" {
@@ -136,18 +133,14 @@ resource "hcloud_server" "host" {
 # The nightly backups land on this volume, a disk of its own that outlives
 # the server: a rebuilt server gets it attached and restores from it. It sits
 # in the server's location, so it does not survive an outage of the whole
-# location.
+# location. The shutdown deletes it with everything else.
 resource "hcloud_volume" "backup" {
   name              = "${var.name}-backup"
   size              = 10
   location          = var.location
   format            = "ext4"
-  delete_protection = true
+  delete_protection = false
   labels            = { project = "candylario" }
-
-  lifecycle {
-    prevent_destroy = true
-  }
 }
 
 resource "hcloud_volume_attachment" "backup" {
